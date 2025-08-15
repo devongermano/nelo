@@ -36,6 +36,7 @@ model Project {
   providerKeys ProviderKey[]
   entities     Entity[]
   contextRules ContextRule[]
+  scenes       Scene[]
 }
 
 model Book {
@@ -65,7 +66,10 @@ model Scene {
   id         String       @id @default(uuid())
   chapter    Chapter      @relation(fields: [chapterId], references: [id])
   chapterId  String
+  project    Project      @relation(fields: [projectId], references: [id])
+  projectId  String
   content    String?
+  embedding  Unsupported("vector")?
   order      Int?
   version    Int          @default(1)
   createdAt  DateTime     @default(now())
