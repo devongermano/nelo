@@ -16,7 +16,9 @@
 - **License:** Recommend MPL-2.0 for file-level copyleft that encourages plugin ecosystem while allowing proprietary extensions. Apache-2.0 lacks copyleft; AGPL-3.0 enforces networked source distribution, which may deter commercial contributors. MPL-2.0 balances openness and adoption.
 - **Tech Stack:**
   - Web: TypeScript + Next.js
-  - API: Node.js + Fastify (WebSocket support)
+  - API:
+    - Node.js + NestJS
+    - FastifyAdapter (WebSocket support)
   - Database: PostgreSQL with pgvector; Redis for ephemeral state
   - Editor: TipTap (ProseMirror) with Markdown I/O
   - Realtime: Yjs CRDTs
