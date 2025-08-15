@@ -4,6 +4,8 @@
   "license": "MPL-2.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @nelo/db exec prisma migrate deploy",
     "db:seed": "pnpm --filter @nelo/db exec prisma db seed"
   },
