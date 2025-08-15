@@ -798,7 +798,8 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - **Refactor Chat panel**: instruction box → scope selector (Scene/Chapter/Book/Project) → “Preview patches”.
 - **Side-by-side diff**: per Scene, per Patch; accept/reject per hunk; confidence pill & rationale tooltip.
 - **Batch actions**: Accept all in scene / across scenes; “Apply accepted”.
-- **History**: Refactor list with rollbacks (revert by refactor).
+- **History**: Refactor list with rollbacks.
+- **Revert by refactor**: per-scene snapshot restoration.
 
 ## 10. Testing Strategy
 - **Unit:** context composer redaction, rename engine, cost meter.
@@ -832,6 +833,15 @@ Feature: Setting change constraints
     Given Chapter-4 is first-person present
     When I refactor setting to "desert checkpoint at noon"
     Then all proposed changes keep first-person present and avoid spoilers
+```
+
+```
+Feature: Revert by refactor
+  Scenario: Version bump and multi-scene rollback
+    Given Refactor-5 modified Scene-3 and Scene-4
+    When I revert that refactor
+    Then snapshots for Scene-3 and Scene-4 are restored
+    And version numbers for both scenes increment
 ```
 
 ## 11. Packaging & Deployment
