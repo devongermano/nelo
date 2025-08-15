@@ -24,7 +24,8 @@
   - Desktop: Tauri (Rust core); Electron notes if Node APIs required
   - AI Adapters: pluggable providers (OpenRouter, OpenAI, Anthropic, Google, Mistral, local via LM Studio/Ollama)
   - Security: optional E2E encryption, secrets vault, role-based access
-  - Observability: structured logs (OpenTelemetry), traces for AI calls, privacy-safe metrics; feature flags via config/remote.
+  - **Observability:** structured logs for AI runs; diff metrics (#spans changed, net words Δ); traces for AI calls, privacy-safe metrics; feature flags via config/remote.
+  - **Document format:** Each Scene stores **Markdown** (canonical) and a **CRDT doc** (ProseMirror/Yjs). Diffs are produced against Markdown and applied as CRDT patches.
   - Testing: Vitest + Playwright; property tests for CRDT and context redaction.
 
 ## 1. Problem Statement & Deltas
@@ -50,6 +51,8 @@
 **MVP (90 days):** Projects/Books/Chapters/Scenes, Codex, Canon DB + Context Builder, Write/Rewrite/Describe, mass find/replace, offline PWA, real-time collab, model adapters, export, cost meter.
 
 **North-star metrics:** time-to-first-1k-words, % offline sessions, collaborative sessions per project, contradiction/spoiler lint count, cost per 10k generated words.
+
+**Milestone after MVP (v0.2):** **AI Refactor Chat (global)**—LLM-driven refactors across chapter/book/project with preview & batch apply. **MVP includes Scene-level Chat‑to‑Edit**.
 
 ## 4. Functional Requirements
 ### User Stories & Gherkin
@@ -99,6 +102,69 @@ Feature: Budget cap
     And spent $10
     When I request another generation
     Then generation is blocked and UI shows budget reached
+```
+
+### Chat‑to‑Edit (Scene) — MVP
+```
+Feature: Chat-driven scene edit with diff preview
+
+Scenario: Ask AI to revise a single scene and review changes
+
+Given I open Scene-5
+
+And I open the "Refactor Chat" panel
+
+When I say "Tighten pacing in the chase paragraph; keep voice and POV"
+
+Then the system returns a patch proposal with a side-by-side diff
+
+And I can accept or reject each hunk
+
+And upon apply, the scene updates via CRDT without losing collaborators' edits
+
+And a snapshot and Run log are recorded
+```
+
+### Semantic Refactor Chat (Chapter/Book/Project) — v0.2
+```
+Feature: Global semantic refactor with targeted scope
+
+Scenario: Add a vocal tic to Character "Jae" across the book
+
+Given a Character "Jae" exists with aliases ["J."]
+
+And I select scope = "Book-1"
+
+When I say "Give Jae a subtle stutter on words starting with 's' in dialogue"
+
+Then the system finds candidate dialogue spans attributed to Jae with confidence scores
+
+And proposes patches grouped by Scene with a batch preview (showing #changes per scene)
+
+And the Canon DB is updated with a trait note "speech_pattern: subtle stutter (s-words)"
+
+And spoiler/redaction rules remain enforced
+
+When I apply the batch
+
+Then only accepted hunks are committed; a refactor record links all patches
+```
+
+### Example: Setting Change — v0.2
+```
+Feature: Change setting from "dockyard" to "desert checkpoint" in Chapter-3
+
+Scenario: Contextual rewrite of descriptions
+
+Given I select scope = "Chapter-3"
+
+When I say "Change the setting from a foggy dockyard at night to a dusty desert checkpoint at noon"
+
+Then the system identifies descriptive spans and dependent metaphors
+
+And generates replacements consistent with style guidelines
+
+And returns a diff preview with per-span confidence and rationale
 ```
 
 #### Local vs Cloud Model
@@ -191,14 +257,23 @@ PromptPreset, Persona, ModelProfile
 ContextRule
 CollabSession, Comment, Suggestion
 CostEvent
+Refactor, Patch, EditSpan, Run
 User, Team, Membership, ProjectMember
-ProviderKey, Budget, Run (LLM call), SceneEntity (join), Embedding (pgvector)
+ProviderKey, Budget, SceneEntity (join), Embedding (pgvector)
+
+Notes:
+- Refactor groups a user instruction, scope, and a set of Patch proposals.
+- Patch captures the diff in two formats: a unified diff over Markdown and a CRDT update blob for precise application.
+- EditSpan provides robust anchoring via Yjs RelativePositions and text anchors for fallback.
 
 ### Prisma Schema (excerpt)
 ```prisma
 enum Role { OWNER MAINTAINER WRITER READER }
 enum RevealState { PLANNED REVEALED REDACTED_UNTIL_SCENE REDACTED_UNTIL_DATE }
 enum SuggestionStatus { OPEN APPLIED DISMISSED }
+enum RefactorStatus { DRAFT PREVIEW APPLIED PARTIAL DISCARDED }
+enum PatchStatus { PROPOSED ACCEPTED REJECTED APPLIED FAILED }
+enum ScopeType { SCENE CHAPTER BOOK PROJECT CUSTOM }
 
 model User {
   id           String   @id @default(uuid())
@@ -343,6 +418,54 @@ model CostEvent {
   createdAt DateTime @default(now())
   run       Run?     @relation(fields: [runId], references: [id])
   runId     String?
+}
+
+model Refactor {
+  id          String         @id @default(uuid())
+  project     Project        @relation(fields: [projectId], references: [id])
+  projectId   String
+  scopeType   ScopeType
+  scopeId     String?        // sceneId|chapterId|bookId for targeted scopes
+  instruction String         // user's natural-language request
+  plan        Json?          // interpreter output: entities, operations, constraints
+  status      RefactorStatus @default(DRAFT)
+  createdBy   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  patches     Patch[]
+  metrics     Json?          // counts, confidence distribution
+}
+
+model Patch {
+  id          String     @id @default(uuid())
+  refactor    Refactor   @relation(fields: [refactorId], references: [id])
+  refactorId  String
+  scene       Scene      @relation(fields: [sceneId], references: [id])
+  sceneId     String
+  status      PatchStatus @default(PROPOSED)
+  // A concise, human-readable summary ("Add vocal tic to 3 lines of dialogue")
+  summary     String
+  // Unified diff (before/after) for preview UI
+  unifiedDiff String
+  // Yjs/ProseMirror delta for precise apply (base64-encoded update)
+  crdtUpdate  Bytes?
+  // Confidence 0-100 and optional rationale
+  confidence  Int         @default(80)
+  rationale   String?
+  createdAt   DateTime    @default(now())
+  appliedAt   DateTime?
+  editSpans   EditSpan[]
+}
+
+model EditSpan {
+  id          String   @id @default(uuid())
+  patch       Patch    @relation(fields: [patchId], references: [id])
+  patchId     String
+  // Robust anchoring
+  yjsAnchor   Json?    // RelativePosition payload
+  textAnchor  Json?    // { beforeKGramHash, afterKGramHash, approxOffset }
+  startChar   Int?
+  endChar     Int?
 }
 
 model Run {
@@ -513,6 +636,53 @@ paths:
               type: object
       responses:
         '200': { description: OK }
+
+  /refactors:
+    post:
+      summary: Create a refactor from chat instruction
+      description: |
+        Interprets an instruction into a Refactor plan and generates Patch proposals.
+        MVP supports scopeType=SCENE; v0.2 enables CHAPTER/BOOK/PROJECT.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, scopeType, instruction]
+              properties:
+                projectId: { type: string }
+                scopeType: { type: string, enum: [SCENE, CHAPTER, BOOK, PROJECT, CUSTOM] }
+                scopeId: { type: string, nullable: true }
+                instruction: { type: string }
+                dryRun: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Refactor created in PREVIEW with patches
+    get:
+      summary: List refactors
+
+  /refactors/{id}:
+    get:
+      summary: Get a refactor
+    patch:
+      summary: Update refactor (status, metadata)
+
+  /refactors/{id}/patches:
+    get:
+      summary: List patches for a refactor
+
+  /refactors/{id}/apply:
+    post:
+      summary: Apply accepted patches
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patchIds: { type: array, items: { type: string } } # if omitted, apply all ACCEPTED
+      responses:
+        '200': { description: Apply result per patch }
   /generate:
     post:
       summary: Run model action with composed context
@@ -560,6 +730,13 @@ run.done → { runId, tokensIn, tokensOut, costUSD }
 
 cost.update → { projectId, spentUSD, remainingUSD }
 
+// Refactor streaming
+refactor.progress → { refactorId, stage: 'interpret'|'retrieve'|'rewrite'|'validate', percent }
+refactor.patch.proposed → { refactorId, patchId, sceneId, summary, confidence }
+refactor.patch.preview → { patchId, unifiedDiffChunk } # chunked for large diffs
+refactor.apply.start → { refactorId }
+refactor.apply.result → { patchId, status: 'APPLIED'|'FAILED', error? }
+
 ### Provider Adapter Interface
 ```ts
 interface ProviderAdapter {
@@ -584,8 +761,31 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
    - Truncate to `maxTokens` using tokenizer estimates per target model; always keep scene header + POV/tense.
 5. **Prompt object**  
    - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. Emit a **human preview** with redaction badges.
-6. **Outputs**  
+6. **Outputs**
    - Return `{ promptObject, redactions[], tokenEstimate }`. On generation, create **Run** + **CostEvent** rows and stream `run.delta`.
+
+## 8.1 Refactor Chat Algorithm (overview)
+**Stages**
+1) **Interpret** the instruction → a structured **Edit Plan**:
+   - `targets` (entities, locations, motifs), `operations` (add vocal tic, change setting), `constraints` (voice, POV), `scope`.
+2) **Retrieve** candidate spans:
+   - Use **SceneEntity** links + embeddings (sentences/paragraphs) + simple heuristics (quote attribution for dialogue).
+3) **Rewrite** per span:
+   - Compose local context (surrounding sentences, Canon facts, style guide). Ask model for revised text + rationale.
+4) **Assemble patches**:
+   - Build **unified diff** and **CRDT update**; compute confidence scores; chunk previews for UI.
+5) **Validate**:
+   - Lint contradictions/spoilers; enforce budgets; ensure POV/tense/style constraints; tokenize to respect `maxTokens`.
+6) **Apply**:
+   - For each ACCEPTED patch, emit Yjs update → broadcast via WS; snapshot scene; log Run/CostEvents.
+
+**Anchoring & resilience**
+- Store **Yjs RelativePositions** and **k‑gram text anchors** to re-locate spans even if the document changes before apply.
+- Fall back to fuzzy matching if anchors drift.
+
+**Safety rails**
+- Canon gates prevent spoiler leaks during retrieval/rewrite.
+- Budget guard: estimate cost before generation, block if over.
 
 ## 9. UX Flows & Wireframes
 - Editor layout with main writing pane, side panels for Codex/Canon facts/Chat.
@@ -595,6 +795,10 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - Collaborative presence shown via avatar cursors and ranges.
 - **Cost meter** in status bar; clicking shows last 20 Runs with tokens and $.
 - **Provider keys** settings with “scope to project/provider/model” toggles.
+- **Refactor Chat panel**: instruction box → scope selector (Scene/Chapter/Book/Project) → “Preview patches”.
+- **Side-by-side diff**: per Scene, per Patch; accept/reject per hunk; confidence pill & rationale tooltip.
+- **Batch actions**: Accept all in scene / across scenes; “Apply accepted”.
+- **History**: Refactor list with rollbacks (revert by refactor).
 
 ## 10. Testing Strategy
 - **Unit:** context composer redaction, rename engine, cost meter.
@@ -603,6 +807,32 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - **Performance:** 100k-token synthetic benchmark.
 
 - **Security:** key‑vault encryption/decryption tests; E2EE round‑trip test for CRDT updates.
+
+### Additional tests for Refactor Chat
+```
+Feature: Scene-level patch safety
+  Scenario: Preserve collaborator edits during apply
+    Given a proposed patch for Scene-2
+    And Bob adds a sentence while I review the diff
+    When I apply the patch
+    Then Bob's sentence remains and the patch is merged correctly (CRDT)
+```
+```
+Feature: Global vocal tic refactor
+  Scenario: Attribution and precision
+    Given Character "Mara" speaks in 12 scenes
+    When I run "Add a clipped ending on excited lines"
+    Then only Mara's dialogue lines are changed
+    And narration remains unchanged
+    And confidence for each patch ≥ 70
+```
+```
+Feature: Setting change constraints
+  Scenario: Preserve POV and tense
+    Given Chapter-4 is first-person present
+    When I refactor setting to "desert checkpoint at noon"
+    Then all proposed changes keep first-person present and avoid spoilers
+```
 
 ## 11. Packaging & Deployment
 - PWA for web; Docker compose bundling Postgres, Redis, API, web.
@@ -618,4 +848,8 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - Themeable UI
 - Mobile offline apps
 - Plugin marketplace
-- Fine‑grained outline mode; index cards; semantic search across project; contradiction linter; PDF/DOCX import; EPUB export polish; public plugin API.
+- Fine‑grained outline mode; index cards; semantic search across project; PDF/DOCX import; EPUB export polish; public plugin API.
+- **Refactor Chat v0.2 scope expansion** (Chapter/Book/Project)
+- **Dialogue attribution annotator** to improve span retrieval confidence
+- **Contradiction linter** across Canon DB and manuscript
+- **Style guide learning** from author's accepted patches
