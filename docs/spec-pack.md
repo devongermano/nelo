@@ -1,6 +1,18 @@
 # {APP_NAME} Spec Pack
 
 ## 0. Project Guardrails
+- **Auth & Tenancy:** Email+pass or OAuth; multi-tenant with **User**, **Team**, **Membership**; **ProjectMember** roles: `OWNER|MAINTAINER|WRITER|READER`.
+- **Key Management (BYOK):** Encrypted **ProviderKey** records per user/team. Envelope encryption with per-user keyring; server never logs secrets. Keys label which endpoints/models are allowed.
+- **Encryption:** 
+  - At rest: DB + object storage encryption.
+  - Optional **E2EE for manuscript**: per-project content key (XChaCha20-Poly1305). CRDT updates encrypted over WS; server relays opaque blobs.
+  - Cloud features that can't work with E2EE (server-side AI) must degrade gracefully (user warned).
+- **Privacy:** No training on user text. Local-only mode (Ollama/LM Studio) supported. Transparent run logs downloadable.
+- **Internationalization & Accessibility:** i18n-ready copy; WCAG 2.2 AA target; all actions keyboard-accessible; prefers-reduced-motion honored.
+- **Performance budgets:** 
+  - Local edit ≤ 75ms P95 
+  - Collab echo ≤ 300ms median 
+  - Context build ≤ 1s for 100k tokens with streaming.
 - **License:** Recommend MPL-2.0 for file-level copyleft that encourages plugin ecosystem while allowing proprietary extensions. Apache-2.0 lacks copyleft; AGPL-3.0 enforces networked source distribution, which may deter commercial contributors. MPL-2.0 balances openness and adoption.
 - **Tech Stack:**
   - Web: TypeScript + Next.js
@@ -12,6 +24,8 @@
   - Desktop: Tauri (Rust core); Electron notes if Node APIs required
   - AI Adapters: pluggable providers (OpenRouter, OpenAI, Anthropic, Google, Mistral, local via LM Studio/Ollama)
   - Security: optional E2E encryption, secrets vault, role-based access
+  - Observability: structured logs (OpenTelemetry), traces for AI calls, privacy-safe metrics; feature flags via config/remote.
+  - Testing: Vitest + Playwright; property tests for CRDT and context redaction.
 
 ## 1. Problem Statement & Deltas
 | Pain Point | Remedy |
@@ -96,14 +110,80 @@ Feature: Local model selection
     Then generation uses local model and cost $0
 ```
 
-## 5. Non-Functional Requirements
-- **Performance:** <75ms local edits, <300ms collab echo, context assembly <1s for 100k tokens.
-- **Reliability:** autosave locally, CRDT merges, crash-safe rehydration.
-- **Security:** no server-side training, BYOK, encrypted storage, least-privilege, transparent logs.
-- **Accessibility:** keyboard-first, screen reader semantic tags, dyslexia-friendly fonts.
+#### Export Round‑trip
+```
+Feature: Lossless export/import
 
-## 6. Domain Model & Schema
-### ERD
+Scenario: Export to Markdown+YAML and re-import
+
+Given a Book with 2 Chapters and 5 Scenes with comments and suggestions
+
+When I export to a zip (Markdown + YAML front-matter + assets)
+
+And I re-import the zip
+
+Then structure, metadata, comments, and suggestions are preserved
+```
+
+#### Conflict Resolution (CRDT)
+```
+Feature: Conflict-free merges
+
+Scenario: Simultaneous offline edits
+
+Given Alice and Bob both edit Scene-12 offline
+
+When both reconnect
+
+Then the merged scene contains both sets of non-overlapping edits
+
+And overlapping ranges are resolved per CRDT order with no data loss
+```
+
+#### Reveal Gate Override (Author-only)
+```
+Feature: Temporary reveal for author tools
+
+Scenario: Use hidden facts in "Outline" but not in "Write"
+
+Given Character "Eve" has secret "double_agent" revealed at Scene-30
+
+When I run the Outline workflow with "Include spoilers for author tools"
+
+Then the context includes "double_agent"
+
+And when I run "Write with AI" for Scene-10
+
+Then the context excludes "double_agent"
+```
+
+#### Global Rename with Aliases
+```
+Feature: Rename across codex and prose with review
+
+Scenario: Replace character name and aliases
+
+Given "Bob" has alias "Bobby"
+
+When I rename "Bob" to "Robert" with "convert aliases"
+
+Then all occurrences of "Bob" and "Bobby" are changed to "Robert"
+
+And a review diff is presented before apply
+```
+
+5. Non-Functional Requirements
+
+Performance: <75ms local edits, <300ms collab echo, context assembly <1s for 100k tokens.
+
+Reliability: autosave locally, CRDT merges, crash-safe rehydration.
+
+Security: no server-side training, BYOK, encrypted storage, least-privilege, transparent logs.
+
+Accessibility: keyboard-first, screen reader semantic tags, dyslexia-friendly fonts.
+
+6. Domain Model & Schema
+ERD
 Project → Book → Chapter → Scene
 Entities: Character, Location, Item, Organization (Entity table)
 CanonFact linked to Entity
@@ -111,13 +191,35 @@ PromptPreset, Persona, ModelProfile
 ContextRule
 CollabSession, Comment, Suggestion
 CostEvent
+User, Team, Membership, ProjectMember
+ProviderKey, Budget, Run (LLM call), SceneEntity (join), Embedding (pgvector)
 
 ### Prisma Schema (excerpt)
 ```prisma
+enum Role { OWNER MAINTAINER WRITER READER }
+enum RevealState { PLANNED REVEALED REDACTED_UNTIL_SCENE REDACTED_UNTIL_DATE }
+enum SuggestionStatus { OPEN APPLIED DISMISSED }
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String?
+  createdAt    DateTime @default(now())
+  memberships  Membership[]
+  projectRoles ProjectMember[]
+  providerKeys ProviderKey[]
+  settings     Json?
+}
+
 model Project {
   id        String @id @default(uuid())
   name      String
+  slug      String  @unique
   books     Book[]
+  members   ProjectMember[]
+  budgets   Budget[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Book {
@@ -125,6 +227,8 @@ model Book {
   project   Project @relation(fields: [projectId], references: [id])
   projectId String
   chapters  Chapter[]
+  title     String
+  index     Int
 }
 
 model Chapter {
@@ -132,15 +236,27 @@ model Chapter {
   book     Book   @relation(fields: [bookId], references: [id])
   bookId   String
   scenes   Scene[]
+  title    String
+  index    Int
 }
 
 model Scene {
   id        String @id @default(uuid())
   chapter   Chapter @relation(fields: [chapterId], references: [id])
   chapterId String
-  status    String
-  pov       String
-  tense     String
+  title     String
+  index     Int
+  status    String      // draft|revised|final
+  pov       String?
+  tense     String?
+  contentMd String      // canonical Markdown
+  docCrdt   Json        // Yjs/Automerge encoded document
+  summary   String?
+  wordCount Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  entities  SceneEntity[]
+  runs      Run[]
 }
 
 model Entity {
@@ -150,6 +266,7 @@ model Entity {
   aliases  String[]
   traits   String[]
   facts    CanonFact[]
+  embeddings Embedding[]
 }
 
 model CanonFact {
@@ -157,9 +274,10 @@ model CanonFact {
   entity      Entity @relation(fields: [entityId], references: [id])
   entityId    String
   fact        String
-  revealState String
-  revealAt    String?
-  confidence  Int
+  revealState RevealState
+  revealSceneId String?
+  revealAt    DateTime?
+  confidence  Int      @default(100)
 }
 
 model PromptPreset {
@@ -186,12 +304,15 @@ model ContextRule {
   include String[]
   exclude String[]
   maxTokens Int
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
 }
 
 model CollabSession {
   id      String @id @default(uuid())
   sceneId String
   users   String[]
+  createdAt DateTime @default(now())
 }
 
 model Comment {
@@ -199,6 +320,8 @@ model Comment {
   sceneId String
   author  String
   text    String
+  range   Json?
+  createdAt DateTime @default(now())
 }
 
 model Suggestion {
@@ -206,7 +329,9 @@ model Suggestion {
   sceneId String
   author  String
   text    String
-  status  String
+  status  SuggestionStatus @default(OPEN)
+  range   Json?
+  createdAt DateTime @default(now())
 }
 
 model CostEvent {
@@ -214,18 +339,157 @@ model CostEvent {
   provider  String
   tokensIn  Int
   tokensOut Int
-  amount    Float
+  amount    Decimal @db.Decimal(10,4)
   createdAt DateTime @default(now())
+  run       Run?     @relation(fields: [runId], references: [id])
+  runId     String?
+}
+
+model Run {
+  id         String   @id @default(uuid())
+  project    Project  @relation(fields: [projectId], references: [id])
+  projectId  String
+  scene      Scene?   @relation(fields: [sceneId], references: [id])
+  sceneId    String?
+  provider   String
+  model      String
+  action     String   // WRITE|REWRITE|DESCRIBE|EMBED|MODERATE
+  promptObj  Json     // the constructed prompt object
+  inputTokens  Int
+  outputTokens Int
+  costUSD    Decimal  @db.Decimal(10,4)
+  createdAt  DateTime @default(now())
+}
+
+model Embedding {
+  id        String   @id @default(uuid())
+  entity    Entity   @relation(fields: [entityId], references: [id])
+  entityId  String
+  // Prisma doesn't yet have native vector type; use Unsupported to map pgvector
+  embedding Unsupported("vector(1536)")
+  createdAt DateTime @default(now())
+  @@index([embedding], map: "embedding_ivfflat") // create with raw SQL migration for ivfflat
+}
+
+model SceneEntity {
+  scene   Scene  @relation(fields: [sceneId], references: [id])
+  sceneId String
+  entity  Entity @relation(fields: [entityId], references: [id])
+  entityId String
+  @@id([sceneId, entityId])
+}
+
+model Team {
+  id        String @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  members   Membership[]
+}
+
+model Membership {
+  id      String @id @default(uuid())
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+  team    Team   @relation(fields: [teamId], references: [id])
+  teamId  String
+  role    Role   @default(WRITER)
+}
+
+model ProjectMember {
+  id        String @id @default(uuid())
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId String
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  role      Role    @default(WRITER)
+  @@unique([projectId, userId])
+}
+
+model ProviderKey {
+  id        String @id @default(uuid())
+  owner     User   @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  provider  String   // openai|anthropic|openrouter|mistral|ollama|lmstudio
+  label     String
+  enc       Bytes    // ciphertext (envelope encryption)
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model Budget {
+  id         String   @id @default(uuid())
+  project    Project  @relation(fields: [projectId], references: [id])
+  projectId  String
+  limitUSD   Decimal  @db.Decimal(10,2)
+  spentUSD   Decimal  @db.Decimal(10,2) @default(0)
+  resetsAt   DateTime?
 }
 ```
 
-## 7. API & Events
-### OpenAPI 3.1 (excerpt)
+7. API & Events
+
+### OpenAPI 3.1 (excerpt – key endpoints & schemas)
 ```yaml
 openapi: 3.1.0
 info:
-  title: Nelo API
+  title: {APP_NAME} API
   version: 0.1.0
+components:
+  schemas:
+    ID: { type: string, format: uuid }
+    Role: { type: string, enum: [OWNER, MAINTAINER, WRITER, READER] }
+    RevealState: { type: string, enum: [PLANNED, REVEALED, REDACTED_UNTIL_SCENE, REDACTED_UNTIL_DATE] }
+    Scene:
+      type: object
+      required: [id, chapterId, title, index, contentMd]
+      properties:
+        id: { $ref: '#/components/schemas/ID' }
+        chapterId: { $ref: '#/components/schemas/ID' }
+        title: { type: string }
+        index: { type: integer }
+        status: { type: string }
+        pov: { type: string }
+        tense: { type: string }
+        contentMd: { type: string }
+        docCrdt: { type: object }
+    ComposeContextRequest:
+      type: object
+      required: [sceneId]
+      properties:
+        sceneId: { $ref: '#/components/schemas/ID' }
+        windowScenes: { type: integer, default: 3 }
+        includeSpoilersForAuthorTools: { type: boolean, default: false }
+        maxTokens: { type: integer, default: 2000 }
+        rules: { type: object }
+    ComposeContextResponse:
+      type: object
+      properties:
+        promptObject: { type: object }
+        redactions:
+          type: array
+          items: { type: object, properties: { factId: { $ref: '#/components/schemas/ID' }, reason: { type: string } } }
+        tokenEstimate: { type: integer }
+    GenerateRequest:
+      type: object
+      required: [sceneId, action, modelProfileId]
+      properties:
+        sceneId: { $ref: '#/components/schemas/ID' }
+        action: { type: string, enum: [WRITE, REWRITE, DESCRIBE] }
+        modelProfileId: { $ref: '#/components/schemas/ID' }
+        stream: { type: boolean, default: true }
+        promptOverride: { type: object }
+    RenamePreviewRequest:
+      type: object
+      required: [projectId, from, to]
+      properties:
+        projectId: { $ref: '#/components/schemas/ID' }
+        from: { type: string }
+        to:   { type: string }
+        includeAliases: { type: boolean, default: true }
+    RenamePreviewResponse:
+      type: object
+      properties:
+        changes: { type: array, items: { type: object, properties: { sceneId: { $ref: '#/components/schemas/ID' }, before: { type: string }, after: { type: string } } } }
 paths:
   /projects:
     get:
@@ -236,6 +500,9 @@ paths:
       summary: Create project
       responses:
         '201': { description: Created }
+  /scenes/{id}:
+    get: { summary: Get scene, responses: { '200': { description: OK } } }
+    patch: { summary: Update scene metadata/content, responses: { '200': { description: OK } } }
   /compose-context:
     post:
       summary: Compose spoiler-safe context
@@ -246,14 +513,52 @@ paths:
               type: object
       responses:
         '200': { description: OK }
+  /generate:
+    post:
+      summary: Run model action with composed context
+      responses: { '200': { description: Stream or text } }
+  /rename/preview:
+    post:
+      summary: Preview global rename
+      responses: { '200': { description: OK } }
+  /rename/apply:
+    post:
+      summary: Apply global rename
+      responses: { '200': { description: OK } }
+  /budgets/{projectId}:
+    get: { summary: Get budget, responses: { '200': { description: OK } } }
+    patch: { summary: Update budget, responses: { '200': { description: OK } } }
 components: {}
 ```
 
 ### WebSocket Events
-- `presence.update` – user cursors
-- `comment.new` – new comment
-- `suggestion.new` – suggestion
-- `cost.update` – cost meter
+
+-- presence.update – user cursors
+-- comment.new – new comment
+-- suggestion.new – suggestion
+-- cost.update – cost meter
+- Handshake
+
+client.hello → { userId, projectId, sceneId, e2ee: boolean, token }
+
+server.ready → { sessionId, capabilities: ['presence','crdt','stream','cost'] }
+- Presence & Editing
+
+presence.update → { userId, cursor: { from, to }, color }
+
+editor.update → { sceneId, ydocUpdateBase64 } // opaque CRDT delta
+- Comments & Suggestions
+
+comment.new → { id, sceneId, author, text, range }
+
+suggestion.new → { id, sceneId, author, text, range }
+- AI Streaming & Costs
+
+run.delta → { runId, chunk, index }
+
+run.done → { runId, tokensIn, tokensOut, costUSD }
+
+cost.update → { projectId, spentUSD, remainingUSD }
 
 ### Provider Adapter Interface
 ```ts
@@ -266,12 +571,21 @@ interface ProviderAdapter {
 Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 
 ## 8. Context Builder Algorithm
-1. Start with active Scene and summaries of N previous scenes.
-2. Pull Canon Facts where `reveal_state = revealed` OR `reveal_at <= current`.
-3. Pull Codex snippets for entities present in scene.
-4. Apply user ContextRules (include/exclude, max tokens).
-5. Output JSON prompt and human-readable preview.
-6. Stream tokens; log CostEvent.
+1. **Selection**  
+   - Active scene S, plus `N` previous scene **summaries** (configurable).  
+   - Entities tagged in S via `SceneEntity` (manual tags) + optional NER over `contentMd`.
+2. **Canon gating**  
+   - Include `CanonFact` if `revealState=REVEALED`, or `REDACTED_UNTIL_SCENE` with `revealSceneId <= S`, or `REDACTED_UNTIL_DATE <= now()`.  
+   - If `includeSpoilersForAuthorTools=true`, include all but mark as `spoiler:true` for preview.
+3. **Retrieval & ranking**  
+   - For entities in S, fetch top‑k **Embeddings** by cosine similarity; combine with recency and explicit links.  
+   - Rank: `score = 0.6*similarity + 0.3*recency + 0.1*explicitTag`.
+4. **Budgeting**  
+   - Truncate to `maxTokens` using tokenizer estimates per target model; always keep scene header + POV/tense.
+5. **Prompt object**  
+   - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. Emit a **human preview** with redaction badges.
+6. **Outputs**  
+   - Return `{ promptObject, redactions[], tokenEstimate }`. On generation, create **Run** + **CostEvent** rows and stream `run.delta`.
 
 ## 9. UX Flows & Wireframes
 - Editor layout with main writing pane, side panels for Codex/Canon facts/Chat.
@@ -279,6 +593,8 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - Model picker dropdown with cost estimate.
 - Global rename dialog with diff preview.
 - Collaborative presence shown via avatar cursors and ranges.
+- **Cost meter** in status bar; clicking shows last 20 Runs with tokens and $.
+- **Provider keys** settings with “scope to project/provider/model” toggles.
 
 ## 10. Testing Strategy
 - **Unit:** context composer redaction, rename engine, cost meter.
@@ -286,14 +602,20 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - **E2E (Playwright):** offline edit → reconnect sync, export/import round-trip, budget cap block.
 - **Performance:** 100k-token synthetic benchmark.
 
+- **Security:** key‑vault encryption/decryption tests; E2EE round‑trip test for CRDT updates.
+
 ## 11. Packaging & Deployment
 - PWA for web; Docker compose bundling Postgres, Redis, API, web.
 - Desktop via Tauri; Electron only if Node APIs required.
 - CI: lint, typecheck, tests, build, release notes, signed binaries.
+## 12. Threat Model & Privacy Posture (new)
+- Assets: manuscripts (contentMd/docCrdt), canon facts, provider keys, run logs.  
+- Risks: API key exfiltration, WS MITM, inference leakage, metadata over-collection.  
+- Mitigations: TLS everywhere; short‑lived WS tokens; per‑user keyring + envelope encryption; minimal logs; opt‑out telemetry; CSP; SSRF hardened providers; rate limiting.
 
 ## 12. Post-MVP Backlog
 - Audio dictation
 - Themeable UI
 - Mobile offline apps
 - Plugin marketplace
-
+- Fine‑grained outline mode; index cards; semantic search across project; contradiction linter; PDF/DOCX import; EPUB export polish; public plugin API.
