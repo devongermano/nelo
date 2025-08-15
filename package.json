@@ -5,7 +5,8 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "db:migrate": "pnpm --filter @nelo/db exec prisma migrate deploy",
-    "db:seed": "pnpm --filter @nelo/db exec prisma db seed"
+    "db:seed": "pnpm --filter @nelo/db exec prisma db seed",
+    "seed": "pnpm --filter @nelo/db seed"
   },
   "devDependencies": {
     "typescript": "^5.3.0",
