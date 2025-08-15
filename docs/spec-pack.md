@@ -847,6 +847,18 @@ interface ProviderAdapter {
 ```
 Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 
+#### Transport & Headers (performance + safety)
+
+- **Transport choices**
+  - HTTP/1.1 for immediate compatibility
+  - Consider HTTP/2 or gRPC for streaming and multiplexing
+- **Safety headers**
+  - `X-Idempotency-Key` to guard against accidental retries
+  - `If-Match` with ETags to prevent lost updates
+- **Error semantics**
+  - `409 Conflict` for edit collisions
+  - `412 Precondition Failed` when safety headers are missing or stale
+
 ## 8. Context Builder Algorithm
 1. **Selection**  
    - Active scene S, plus `N` previous scene **summaries** (configurable).  
