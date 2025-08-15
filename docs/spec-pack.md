@@ -757,10 +757,10 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 3. **Retrieval & ranking**  
    - For entities in S, fetch top‑k **Embeddings** by cosine similarity; combine with recency and explicit links.  
    - Rank: `score = 0.6*similarity + 0.3*recency + 0.1*explicitTag`.
-4. **Budgeting**  
+4. **Budgeting**
    - Truncate to `maxTokens` using tokenizer estimates per target model; always keep scene header + POV/tense.
-5. **Prompt object**  
-   - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. Emit a **human preview** with redaction badges.
+5. **Prompt object**
+   - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. `system`/`instructions` encode the active `StyleGuide`, scene POV, and tense so prompts preserve them. Emit a **human preview** with redaction badges.
 6. **Outputs**
    - Return `{ promptObject, redactions[], tokenEstimate }`. On generation, create **Run** + **CostEvent** rows and stream `run.delta`.
 
@@ -775,7 +775,7 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 4) **Assemble patches**:
    - Build **unified diff** and **CRDT update**; compute confidence scores; chunk previews for UI.
 5) **Validate**:
-   - Lint contradictions/spoilers; enforce budgets; ensure POV/tense/style constraints; tokenize to respect `maxTokens`.
+   - Lint contradictions/spoilers; enforce budgets; ensure POV/tense/style constraints; tokenize to respect `maxTokens`; reject hunks that violate these rules or introduce redacted canon.
 6) **Apply**:
    - For each ACCEPTED patch, emit Yjs update → broadcast via WS; snapshot scene; log Run/CostEvents.
 
