@@ -257,13 +257,15 @@ PromptPreset, Persona, ModelProfile
 ContextRule
 CollabSession, Comment, Suggestion
 CostEvent
-Refactor, Patch, EditSpan, Run
+Refactor, Patch, Hunk, EditSpan, Run
+Snapshot, Sentence, StyleGuide
 User, Team, Membership, ProjectMember
 ProviderKey, Budget, SceneEntity (join), Embedding (pgvector)
 
 Notes:
 - Refactor groups a user instruction, scope, and a set of Patch proposals.
 - Patch captures the diff in two formats: a unified diff over Markdown and a CRDT update blob for precise application.
+- Hunk represents a sub-diff within a Patch for granular review.
 - EditSpan provides robust anchoring via Yjs RelativePositions and text anchors for fallback.
 
 ### Prisma Schema (excerpt)
@@ -273,6 +275,7 @@ enum RevealState { PLANNED REVEALED REDACTED_UNTIL_SCENE REDACTED_UNTIL_DATE }
 enum SuggestionStatus { OPEN APPLIED DISMISSED }
 enum RefactorStatus { DRAFT PREVIEW APPLIED PARTIAL DISCARDED }
 enum PatchStatus { PROPOSED ACCEPTED REJECTED APPLIED FAILED }
+enum HunkStatus { PROPOSED ACCEPTED REJECTED APPLIED FAILED }
 enum ScopeType { SCENE CHAPTER BOOK PROJECT CUSTOM }
 
 model User {
@@ -326,12 +329,44 @@ model Scene {
   tense     String?
   contentMd String      // canonical Markdown
   docCrdt   Json        // Yjs/Automerge encoded document
+  version   Int         @default(1)
   summary   String?
   wordCount Int         @default(0)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+  snapshots Snapshot[]
+  sentences Sentence[]
   entities  SceneEntity[]
   runs      Run[]
+}
+
+model Snapshot {
+  id        String @id @default(uuid())
+  scene     Scene  @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  version   Int
+  contentMd String
+  createdAt DateTime @default(now())
+}
+
+model Sentence {
+  id        String @id @default(uuid())
+  scene     Scene  @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  index     Int
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StyleGuide {
+  id        String @id @default(uuid())
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  rules     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Entity {
@@ -454,18 +489,33 @@ model Patch {
   rationale   String?
   createdAt   DateTime    @default(now())
   appliedAt   DateTime?
-  editSpans   EditSpan[]
+  hunks       Hunk[]
 }
 
 model EditSpan {
   id          String   @id @default(uuid())
-  patch       Patch    @relation(fields: [patchId], references: [id])
-  patchId     String
+  hunk        Hunk     @relation(fields: [hunkId], references: [id])
+  hunkId      String
   // Robust anchoring
   yjsAnchor   Json?    // RelativePosition payload
   textAnchor  Json?    // { beforeKGramHash, afterKGramHash, approxOffset }
   startChar   Int?
   endChar     Int?
+}
+
+model Hunk {
+  id          String     @id @default(uuid())
+  patch       Patch      @relation(fields: [patchId], references: [id])
+  patchId     String
+  status      HunkStatus @default(PROPOSED)
+  summary     String
+  unifiedDiff String
+  crdtUpdate  Bytes?
+  confidence  Int        @default(80)
+  rationale   String?
+  createdAt   DateTime   @default(now())
+  appliedAt   DateTime?
+  editSpans   EditSpan[]
 }
 
 model Run {
@@ -613,7 +663,34 @@ components:
       type: object
       properties:
         changes: { type: array, items: { type: object, properties: { sceneId: { $ref: '#/components/schemas/ID' }, before: { type: string }, after: { type: string } } } }
-paths:
+    PatchProposal:
+      type: object
+      required: [id, sceneId, summary, hunks]
+      properties:
+        id: { $ref: '#/components/schemas/ID' }
+        sceneId: { $ref: '#/components/schemas/ID' }
+        summary: { type: string }
+        confidence: { type: number, format: float }
+        hunks:
+          type: array
+          items:
+            type: object
+            required: [op, origStart, origEnd, newText, anchors]
+            properties:
+              op: { type: string, enum: [REPLACE, INSERT, DELETE] }
+              origStart: { type: integer, description: 'start index in original text' }
+              origEnd: { type: integer, description: 'end index in original text' }
+              newText: { type: string, description: 'proposed replacement text' }
+              anchors:
+                type: object
+                description: 'Anchors to re-locate hunk if doc changes'
+                properties:
+                  before: { type: string, description: 'k-gram preceding hunk' }
+                  after: { type: string, description: 'k-gram following hunk' }
+                  yjs:
+                    type: object
+                    description: 'Yjs RelativePosition'
+    paths:
   /projects:
     get:
       summary: List projects
@@ -683,6 +760,27 @@ paths:
                 patchIds: { type: array, items: { type: string } } # if omitted, apply all ACCEPTED
       responses:
         '200': { description: Apply result per patch }
+  /patches/{patchId}/apply:
+    post:
+      summary: Apply selected hunks
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          schema: { type: string }
+        - in: header
+          name: If-Match
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hunkIds: { type: array, items: { type: string } } # if omitted, apply all
+      responses:
+        '200': { description: Patch applied }
+        '412': { description: Precondition failed }
+        '409': { description: Patch conflict }
   /generate:
     post:
       summary: Run model action with composed context
@@ -698,8 +796,10 @@ paths:
   /budgets/{projectId}:
     get: { summary: Get budget, responses: { '200': { description: OK } } }
     patch: { summary: Update budget, responses: { '200': { description: OK } } }
-components: {}
+  components: {}
 ```
+
+API providers must return `PatchProposal[]`.
 
 ### WebSocket Events
 
@@ -747,6 +847,18 @@ interface ProviderAdapter {
 ```
 Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 
+#### Transport & Headers (performance + safety)
+
+- **Transport choices**
+  - HTTP/1.1 for immediate compatibility
+  - Consider HTTP/2 or gRPC for streaming and multiplexing
+- **Safety headers**
+  - `X-Idempotency-Key` to guard against accidental retries
+  - `If-Match` with ETags to prevent lost updates
+- **Error semantics**
+  - `409 Conflict` for edit collisions
+  - `412 Precondition Failed` when safety headers are missing or stale
+
 ## 8. Context Builder Algorithm
 1. **Selection**  
    - Active scene S, plus `N` previous scene **summaries** (configurable).  
@@ -757,10 +869,10 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 3. **Retrieval & ranking**  
    - For entities in S, fetch top‑k **Embeddings** by cosine similarity; combine with recency and explicit links.  
    - Rank: `score = 0.6*similarity + 0.3*recency + 0.1*explicitTag`.
-4. **Budgeting**  
+4. **Budgeting**
    - Truncate to `maxTokens` using tokenizer estimates per target model; always keep scene header + POV/tense.
-5. **Prompt object**  
-   - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. Emit a **human preview** with redaction badges.
+5. **Prompt object**
+   - `system`, `instructions`, `sceneContext[]`, `canonFacts[]`, `styleGuidelines[]`, `guardrails[]`. `system`/`instructions` encode the active `StyleGuide`, scene POV, and tense so prompts preserve them. Emit a **human preview** with redaction badges.
 6. **Outputs**
    - Return `{ promptObject, redactions[], tokenEstimate }`. On generation, create **Run** + **CostEvent** rows and stream `run.delta`.
 
@@ -769,7 +881,9 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 1) **Interpret** the instruction → a structured **Edit Plan**:
    - `targets` (entities, locations, motifs), `operations` (add vocal tic, change setting), `constraints` (voice, POV), `scope`.
 2) **Retrieve** candidate spans:
-   - Use **SceneEntity** links + embeddings (sentences/paragraphs) + simple heuristics (quote attribution for dialogue).
+   - **Sentence segmentation** of the scene and embedding search over those units.
+   - Heuristics flag `isDialogue` (leading/trailing quotes, em‑dash openings) and attempt **speaker attribution** from nearby tags ("X said", existing annotations).
+   - Use **SceneEntity** links + embeddings to gather spans; when a `speakerId` is supplied, filter to sentences attributed to that speaker for targeted refactors.
 3) **Rewrite** per span:
    - Compose local context (surrounding sentences, Canon facts, style guide). Ask model for revised text + rationale.
 4) **Assemble patches**:
@@ -801,7 +915,8 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - **Refactor Chat panel**: instruction box → scope selector (Scene/Chapter/Book/Project) → “Preview patches”.
 - **Side-by-side diff**: per Scene, per Patch; accept/reject per hunk; confidence pill & rationale tooltip.
 - **Batch actions**: Accept all in scene / across scenes; “Apply accepted”.
-- **History**: Refactor list with rollbacks (revert by refactor).
+- **History**: Refactor list with rollbacks.
+- **Revert by refactor**: per-scene snapshot restoration.
 
 ## 10. Testing Strategy
 - **Unit:** context composer redaction, rename engine, cost meter.
@@ -844,6 +959,15 @@ Feature: Canon gate blocks PLANNED facts
     Then "Prophecy" is omitted
     When I enable includePlannedFacts
     Then "Prophecy" appears tagged as planned
+```
+
+```
+Feature: Revert by refactor
+  Scenario: Version bump and multi-scene rollback
+    Given Refactor-5 modified Scene-3 and Scene-4
+    When I revert that refactor
+    Then snapshots for Scene-3 and Scene-4 are restored
+    And version numbers for both scenes increment
 ```
 
 ## 11. Packaging & Deployment
