@@ -683,6 +683,27 @@ paths:
                 patchIds: { type: array, items: { type: string } } # if omitted, apply all ACCEPTED
       responses:
         '200': { description: Apply result per patch }
+  /patches/{patchId}/apply:
+    post:
+      summary: Apply selected hunks
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          schema: { type: string }
+        - in: header
+          name: If-Match
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hunkIds: { type: array, items: { type: string } } # if omitted, apply all
+      responses:
+        '200': { description: Patch applied }
+        '412': { description: Precondition failed }
+        '409': { description: Patch conflict }
   /generate:
     post:
       summary: Run model action with composed context
