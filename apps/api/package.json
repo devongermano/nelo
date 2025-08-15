@@ -7,10 +7,12 @@
   },
   "dependencies": {
     "fastify": "^4.22.0",
-    "ws": "^8.13.0"
+    "ws": "^8.13.0",
+    "@nelo/context": "workspace:*"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
-    "@types/ws": "^8.5.8"
+    "@types/ws": "^8.5.8",
+    "supertest": "^6.3.3"
   }
 }

@@ -1,6 +1,11 @@
 import { ComposeContextOptionsSchema, type ComposeContextOptions } from './types';
 
-export function composeContext(options: ComposeContextOptions) {
+export interface ComposeContextResult {
+  segments: any[];
+  redactions: any[];
+}
+
+export function composeContext(options: ComposeContextOptions): ComposeContextResult {
   ComposeContextOptionsSchema.parse(options);
   return { segments: [], redactions: [] };
 }
