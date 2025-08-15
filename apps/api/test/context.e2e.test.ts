@@ -10,7 +10,9 @@ describe('POST /compose-context', () => {
     const app = Fastify();
     app.register(contextController, { composeContext });
     await app.ready();
-    const response = await request(app.server).post('/compose-context');
+    const response = await request(app.server)
+      .post('/compose-context')
+      .send({ template: 'hi' });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ segments: [], redactions: [] });
     await app.close();

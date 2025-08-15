@@ -5,6 +5,10 @@
     "moduleResolution": "Node",
     "esModuleInterop": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nelo/*": ["packages/*/src"]
+    }
   }
 }

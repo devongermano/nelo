@@ -2,5 +2,8 @@
   "name": "@nelo/context",
   "version": "0.0.0",
   "main": "src/index.ts",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "zod": "^3.22.4"
+  }
 }

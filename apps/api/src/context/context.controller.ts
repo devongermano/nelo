@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { composeContext as defaultComposeContext } from '@nelo/context';
+import { composeContext as defaultComposeContext, type ComposeContextOptions } from '@nelo/context';
 
 interface ContextControllerOptions {
   composeContext?: typeof defaultComposeContext;
@@ -7,7 +7,9 @@ interface ContextControllerOptions {
 
 export default async function contextController(
   app: FastifyInstance,
-  { composeContext = defaultComposeContext }: ContextControllerOptions = {}
+  { composeContext = defaultComposeContext }: ContextControllerOptions = {},
 ) {
-  app.post('/compose-context', async () => composeContext());
+  app.post('/compose-context', async (request) =>
+    composeContext(request.body as ComposeContextOptions),
+  );
 }
