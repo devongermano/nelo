@@ -775,7 +775,10 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 4) **Assemble patches**:
    - Build **unified diff** and **CRDT update**; compute confidence scores; chunk previews for UI.
 5) **Validate**:
-   - Lint contradictions/spoilers; enforce budgets; ensure POV/tense/style constraints; tokenize to respect `maxTokens`.
+   - Lint contradictions/spoilers; enforce budgets.
+   - Regex checks for POV/tense; detect setting contradictions (e.g., night → noon).
+   - Assert canon gate omits `PLANNED` facts unless explicitly allowed.
+   - Tokenize to respect `maxTokens`.
 6) **Apply**:
    - For each ACCEPTED patch, emit Yjs update → broadcast via WS; snapshot scene; log Run/CostEvents.
 
@@ -805,7 +808,7 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 - **Property:** CRDT merge invariants.
 - **E2E (Playwright):** offline edit → reconnect sync, export/import round-trip, budget cap block.
 - **Performance:** 100k-token synthetic benchmark.
-
+- **Validator:** regex POV/tense checks; setting contradiction detection (night → noon); canon gate blocks `PLANNED` facts without override.
 - **Security:** key‑vault encryption/decryption tests; E2EE round‑trip test for CRDT updates.
 
 ### Additional tests for Refactor Chat
@@ -832,6 +835,15 @@ Feature: Setting change constraints
     Given Chapter-4 is first-person present
     When I refactor setting to "desert checkpoint at noon"
     Then all proposed changes keep first-person present and avoid spoilers
+```
+```
+Feature: Canon gate blocks PLANNED facts
+  Scenario: Exclude planned facts unless allowed
+    Given a Canon fact "Prophecy" is marked PLANNED
+    When I run Refactor without override
+    Then "Prophecy" is omitted
+    When I enable includePlannedFacts
+    Then "Prophecy" appears tagged as planned
 ```
 
 ## 11. Packaging & Deployment
