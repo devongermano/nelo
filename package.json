@@ -8,6 +8,7 @@
     "db:seed": "pnpm --filter @nelo/db exec prisma db seed"
   },
   "devDependencies": {
+    "supertest": "^6.3.3",
     "typescript": "^5.3.0",
     "vitest": "^0.34.0"
   }
