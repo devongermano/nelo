@@ -1,0 +1,14 @@
+{
+  "name": "@nelo/api",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "fastify": "^4.22.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  }
+}
