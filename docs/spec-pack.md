@@ -769,7 +769,9 @@ Adapters: OpenRouter, OpenAI, Anthropic, Ollama/LM Studio.
 1) **Interpret** the instruction → a structured **Edit Plan**:
    - `targets` (entities, locations, motifs), `operations` (add vocal tic, change setting), `constraints` (voice, POV), `scope`.
 2) **Retrieve** candidate spans:
-   - Use **SceneEntity** links + embeddings (sentences/paragraphs) + simple heuristics (quote attribution for dialogue).
+   - **Sentence segmentation** of the scene and embedding search over those units.
+   - Heuristics flag `isDialogue` (leading/trailing quotes, em‑dash openings) and attempt **speaker attribution** from nearby tags ("X said", existing annotations).
+   - Use **SceneEntity** links + embeddings to gather spans; when a `speakerId` is supplied, filter to sentences attributed to that speaker for targeted refactors.
 3) **Rewrite** per span:
    - Compose local context (surrounding sentences, Canon facts, style guide). Ask model for revised text + rationale.
 4) **Assemble patches**:
