@@ -976,6 +976,13 @@ Feature: Revert by refactor
 - PWA for web; Docker compose bundling Postgres, Redis, API, web.
 - Desktop via Tauri; Electron only if Node APIs required.
 - CI: lint, typecheck, tests, build, release notes, signed binaries.
+
+### Desktop integration notes
+- Access files via Tauri's dialog APIs; default to project directory.
+- Use OS keychain plugins for storing provider keys.
+- Register custom `nelo://` protocol for deep links.
+- Auto-update via Tauri's updater with signature verification.
+
 ## 12. Threat Model & Privacy Posture (new)
 - Assets: manuscripts (contentMd/docCrdt), canon facts, provider keys, run logs.  
 - Risks: API key exfiltration, WS MITM, inference leakage, metadata over-collection.  
