@@ -1,0 +1,228 @@
+// Prisma schema for Nelo database
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  name         String
+  version      Int           @default(1)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  books        Book[]
+  styleGuides  StyleGuide[]
+  budgets      Budget[]
+  users        Membership[]
+  providerKeys ProviderKey[]
+  entities     Entity[]
+  contextRules ContextRule[]
+}
+
+model Book {
+  id        String   @id @default(uuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  title     String
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chapters  Chapter[]
+}
+
+model Chapter {
+  id        String   @id @default(uuid())
+  book      Book     @relation(fields: [bookId], references: [id])
+  bookId    String
+  title     String
+  order     Int?
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scenes    Scene[]
+}
+
+model Scene {
+  id         String       @id @default(uuid())
+  chapter    Chapter      @relation(fields: [chapterId], references: [id])
+  chapterId  String
+  content    String?
+  order      Int?
+  version    Int          @default(1)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  snapshots  Snapshot[]
+  entities   SceneEntity[]
+  embeddings Embedding[]
+  runs       Run[]
+  refactors  Refactor[]
+}
+
+model Entity {
+  id        String       @id @default(uuid())
+  project   Project      @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  facts     CanonFact[]
+  scenes    SceneEntity[]
+}
+
+model CanonFact {
+  id        String   @id @default(uuid())
+  entity    Entity   @relation(fields: [entityId], references: [id])
+  entityId  String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model ContextRule {
+  id        String   @id @default(uuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  pattern   String
+  response  String
+  createdAt DateTime @default(now())
+}
+
+model Run {
+  id        String     @id @default(uuid())
+  scene     Scene?     @relation(fields: [sceneId], references: [id])
+  sceneId   String?
+  status    RunStatus  @default(PENDING)
+  createdAt DateTime   @default(now())
+  costEvents CostEvent[]
+}
+
+model CostEvent {
+  id        String   @id @default(uuid())
+  run       Run      @relation(fields: [runId], references: [id])
+  runId     String
+  amount    Float
+  createdAt DateTime @default(now())
+}
+
+model Refactor {
+  id        String   @id @default(uuid())
+  scene     Scene    @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  patches   Patch[]
+  createdAt DateTime @default(now())
+}
+
+model Patch {
+  id         String   @id @default(uuid())
+  refactor   Refactor @relation(fields: [refactorId], references: [id])
+  refactorId String
+  hunks      Hunk[]
+}
+
+model Hunk {
+  id       String @id @default(uuid())
+  patch    Patch  @relation(fields: [patchId], references: [id])
+  patchId  String
+  editSpans EditSpan[]
+}
+
+model EditSpan {
+  id     String @id @default(uuid())
+  hunk   Hunk   @relation(fields: [hunkId], references: [id])
+  hunkId String
+  start  Int
+  end    Int
+}
+
+model Snapshot {
+  id        String    @id @default(uuid())
+  scene     Scene     @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  content   String
+  createdAt DateTime   @default(now())
+  sentences Sentence[]
+}
+
+model Sentence {
+  id         String   @id @default(uuid())
+  snapshot   Snapshot @relation(fields: [snapshotId], references: [id])
+  snapshotId String
+  text       String
+  order      Int
+}
+
+model StyleGuide {
+  id        String   @id @default(uuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  rules     Json?
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id          String       @id @default(uuid())
+  email       String       @unique
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+}
+
+model Membership {
+  id        String  @id @default(uuid())
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId String
+  role      Role
+}
+
+model Budget {
+  id        String   @id @default(uuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  amount    Float
+  createdAt DateTime @default(now())
+}
+
+model ProviderKey {
+  id        String   @id @default(uuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  provider  String
+  apiKey    String
+  createdAt DateTime @default(now())
+}
+
+model SceneEntity {
+  scene   Scene  @relation(fields: [sceneId], references: [id])
+  sceneId String
+  entity  Entity @relation(fields: [entityId], references: [id])
+  entityId String
+  @@id([sceneId, entityId])
+}
+
+model Embedding {
+  id        String   @id @default(uuid())
+  scene     Scene?   @relation(fields: [sceneId], references: [id])
+  sceneId   String?
+  embedding Unsupported("vector")
+  createdAt DateTime @default(now())
+}

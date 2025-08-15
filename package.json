@@ -3,6 +3,10 @@
   "private": true,
   "license": "MPL-2.0",
   "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "db:migrate": "pnpm --filter @nelo/db exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @nelo/db exec prisma db seed"
+  },
   "devDependencies": {
     "typescript": "^5.3.0",
     "vitest": "^0.34.0"
