@@ -613,7 +613,34 @@ components:
       type: object
       properties:
         changes: { type: array, items: { type: object, properties: { sceneId: { $ref: '#/components/schemas/ID' }, before: { type: string }, after: { type: string } } } }
-paths:
+    PatchProposal:
+      type: object
+      required: [id, sceneId, summary, hunks]
+      properties:
+        id: { $ref: '#/components/schemas/ID' }
+        sceneId: { $ref: '#/components/schemas/ID' }
+        summary: { type: string }
+        confidence: { type: number, format: float }
+        hunks:
+          type: array
+          items:
+            type: object
+            required: [op, origStart, origEnd, newText, anchors]
+            properties:
+              op: { type: string, enum: [REPLACE, INSERT, DELETE] }
+              origStart: { type: integer, description: 'start index in original text' }
+              origEnd: { type: integer, description: 'end index in original text' }
+              newText: { type: string, description: 'proposed replacement text' }
+              anchors:
+                type: object
+                description: 'Anchors to re-locate hunk if doc changes'
+                properties:
+                  before: { type: string, description: 'k-gram preceding hunk' }
+                  after: { type: string, description: 'k-gram following hunk' }
+                  yjs:
+                    type: object
+                    description: 'Yjs RelativePosition'
+    paths:
   /projects:
     get:
       summary: List projects
@@ -719,8 +746,10 @@ paths:
   /budgets/{projectId}:
     get: { summary: Get budget, responses: { '200': { description: OK } } }
     patch: { summary: Update budget, responses: { '200': { description: OK } } }
-components: {}
+  components: {}
 ```
+
+API providers must return `PatchProposal[]`.
 
 ### WebSocket Events
 
