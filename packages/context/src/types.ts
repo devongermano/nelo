@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import typia from 'typia';
 
-export const ComposeContextOptionsSchema = z.object({
-  template: z.string()
-});
+export interface ComposeContextOptions {
+  template: string;
+}
 
-export type ComposeContextOptions = z.infer<typeof ComposeContextOptionsSchema>;
+export const validateComposeContextOptions = typia.createValidate<ComposeContextOptions>();

@@ -1,13 +1,9 @@
 import {
-  Body,
   Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
   UseInterceptors,
   PreconditionFailedException,
 } from '@nestjs/common';
+import { TypedRoute, TypedBody, TypedParam } from '@nestia/core';
 import { IdempotencyInterceptor } from '../interceptors/idempotency.interceptor';
 import { CreateSceneDto } from './dto/create-scene.dto';
 import { UpdateSceneDto } from './dto/update-scene.dto';
@@ -19,17 +15,17 @@ export class ScenesController {
   constructor(private readonly scenesService: ScenesService) {}
 
   @UseInterceptors(IdempotencyInterceptor)
-  @Post()
-  async create(@Body() dto: CreateSceneDto) {
+  @TypedRoute.Post()
+  async create(@TypedBody() dto: CreateSceneDto) {
     const { content, chapterId, projectId } = dto;
     return this.scenesService.create(content, chapterId, projectId);
   }
 
-  @Patch(':id')
+  @TypedRoute.Patch(':id')
   async update(
-    @Param('id') id: string,
+    @TypedParam('id') id: string,
     @IfMatchHeader() ifMatch: string,
-    @Body() dto: UpdateSceneDto,
+    @TypedBody() dto: UpdateSceneDto,
   ) {
     // First verify the version matches what the client expects
     const currentScene = await this.scenesService.find(id);
@@ -42,8 +38,8 @@ export class ScenesController {
     return await this.scenesService.update(id, dto.content, dto.order);
   }
 
-  @Get(':id')
-  async get(@Param('id') id: string) {
+  @TypedRoute.Get(':id')
+  async get(@TypedParam('id') id: string) {
     return this.scenesService.getSceneById(id);
   }
 }

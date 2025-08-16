@@ -1,11 +1,12 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { TypedRoute } from '@nestia/core';
 import { ProjectsService } from './projects.service';
 
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  @Get()
+  @TypedRoute.Get()
   getAll() {
     return this.projectsService.getAllProjects();
   }

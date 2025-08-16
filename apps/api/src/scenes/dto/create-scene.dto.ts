@@ -1,12 +1,7 @@
-import { IsString, IsUUID } from 'class-validator';
+import { tags } from 'typia';
 
-export class CreateSceneDto {
-  @IsString()
-  content!: string;
-
-  @IsUUID()
-  chapterId!: string;
-
-  @IsUUID()
-  projectId!: string;
+export interface CreateSceneDto {
+  content: string;
+  chapterId: string & tags.Format<"uuid">;
+  projectId: string & tags.Format<"uuid">;
 }

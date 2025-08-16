@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { TypedRoute, TypedBody } from '@nestia/core';
 import { ComposeContextOptions } from '@nelo/context';
 import { ContextService } from './context.service';
 
@@ -6,8 +7,8 @@ import { ContextService } from './context.service';
 export class ContextController {
   constructor(private readonly contextService: ContextService) {}
 
-  @Post('compose-context')
-  compose(@Body() body: ComposeContextOptions) {
+  @TypedRoute.Post('compose-context')
+  compose(@TypedBody() body: ComposeContextOptions) {
     return this.contextService.compose(body);
   }
 }

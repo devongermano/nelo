@@ -1,4 +1,4 @@
-import { ComposeContextOptionsSchema, type ComposeContextOptions } from './types';
+import { validateComposeContextOptions, type ComposeContextOptions } from './types';
 
 export interface ComposeContextResult {
   segments: any[];
@@ -6,9 +6,12 @@ export interface ComposeContextResult {
 }
 
 export function composeContext(options: ComposeContextOptions): ComposeContextResult {
-  ComposeContextOptionsSchema.parse(options);
+  const validation = validateComposeContextOptions(options);
+  if (!validation.success) {
+    throw new Error('Invalid options: ' + JSON.stringify(validation.errors));
+  }
   return { segments: [], redactions: [] };
 }
 
-export { ComposeContextOptionsSchema } from './types';
+export { validateComposeContextOptions } from './types';
 export type { ComposeContextOptions } from './types';

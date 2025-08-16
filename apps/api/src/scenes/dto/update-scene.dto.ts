@@ -1,12 +1,6 @@
-import { IsOptional, IsString, IsInt, Min } from 'class-validator';
+import { tags } from 'typia';
 
-export class UpdateSceneDto {
-  @IsString()
-  @IsOptional()
+export interface UpdateSceneDto {
   content?: string;
-
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  order?: number;
+  order?: number & tags.Type<"uint32"> & tags.Minimum<0>;
 }
