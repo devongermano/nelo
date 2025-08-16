@@ -6,6 +6,8 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "baseUrl": ".",
     "paths": {
       "@nelo/*": ["packages/*/src"]
