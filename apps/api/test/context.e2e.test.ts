@@ -1,16 +1,12 @@
 /// <reference types="vitest" />
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import Fastify from 'fastify';
-import { composeContext } from '@nelo/context';
-import contextController from '../src/context/context.controller';
+import { buildApp } from '../src/main';
 
 describe('POST /compose-context', () => {
   it('returns empty segments and redactions', async () => {
-    const app = Fastify();
-    app.register(contextController, { composeContext });
-    await app.ready();
-    const response = await request(app.server)
+    const app = await buildApp();
+    const response = await request(app.getHttpServer())
       .post('/compose-context')
       .send({ template: 'hi' });
     expect(response.status).toBe(200);
