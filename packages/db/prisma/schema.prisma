@@ -211,6 +211,8 @@ model ProviderKey {
   project   Project  @relation(fields: [projectId], references: [id])
   projectId String
   provider  String
+  // SECURITY: API keys should be encrypted before storage using the crypto utilities
+  // Use encryptApiKey() before saving and decryptApiKey() when retrieving
   apiKey    String
   createdAt DateTime @default(now())
 }

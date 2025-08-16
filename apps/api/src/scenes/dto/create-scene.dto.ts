@@ -1,6 +1,12 @@
-import { IsString } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class CreateSceneDto {
   @IsString()
-  text!: string;
+  content!: string;
+
+  @IsUUID()
+  chapterId!: string;
+
+  @IsUUID()
+  projectId!: string;
 }

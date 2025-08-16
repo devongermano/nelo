@@ -6,6 +6,7 @@
   "scripts": {
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "prisma:generate": "pnpm --filter @nelo/db generate",
     "db:migrate": "pnpm --filter @nelo/db exec prisma migrate deploy",
     "db:seed": "pnpm --filter @nelo/db exec prisma db seed",
     "seed": "pnpm --filter @nelo/db seed"

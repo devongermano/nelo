@@ -35,9 +35,13 @@ describe('IdempotencyInterceptor', () => {
     await app.close();
   });
 
-  it('returns 409 on duplicate idempotency key', async () => {
-    await app.inject({ method: 'POST', url: '/test', headers: { 'x-idempotency-key': 'abc' } });
-    const res = await app.inject({ method: 'POST', url: '/test', headers: { 'x-idempotency-key': 'abc' } });
-    expect(res.statusCode).toBe(409);
+  it('returns cached response for duplicate idempotency key', async () => {
+    const firstRes = await app.inject({ method: 'POST', url: '/test', headers: { 'x-idempotency-key': 'abc' } });
+    expect(firstRes.statusCode).toBe(201);
+    expect(JSON.parse(firstRes.body)).toEqual({ ok: true });
+    
+    const secondRes = await app.inject({ method: 'POST', url: '/test', headers: { 'x-idempotency-key': 'abc' } });
+    expect(secondRes.statusCode).toBe(201);
+    expect(JSON.parse(secondRes.body)).toEqual({ ok: true });
   });
 });
