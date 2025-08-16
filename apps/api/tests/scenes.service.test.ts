@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 import { prisma, reset } from '@nelo/db';
-import { getSceneById } from '../src/scenes.service';
+import { ScenesService } from '../src/scenes/scenes.service';
 
 beforeEach(async () => {
   await reset();
@@ -12,12 +13,15 @@ describe('scenes.service', () => {
     const book = await prisma.book.create({ data: { title: 'b', projectId: project.id } });
     const chapter = await prisma.chapter.create({ data: { title: 'c', bookId: book.id } });
     const scene = await prisma.scene.create({ data: { chapterId: chapter.id, content: 'hi' } });
-    const found = await getSceneById(scene.id);
+    const service = new ScenesService();
+    const found = await service.getSceneById(scene.id);
     expect(found?.id).toBe(scene.id);
   });
 
-  it('returns null when scene missing', async () => {
-    const result = await getSceneById('nonexistent');
-    expect(result).toBeNull();
+  it('throws when scene missing', async () => {
+    const service = new ScenesService();
+    await expect(service.getSceneById('nonexistent')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

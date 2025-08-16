@@ -1,15 +1,13 @@
-import { FastifyInstance } from 'fastify';
-import { composeContext as defaultComposeContext, type ComposeContextOptions } from '@nelo/context';
+import { Body, Controller, Post } from '@nestjs/common';
+import { ComposeContextOptions } from '@nelo/context';
+import { ContextService } from './context.service';
 
-interface ContextControllerOptions {
-  composeContext?: typeof defaultComposeContext;
-}
+@Controller()
+export class ContextController {
+  constructor(private readonly contextService: ContextService) {}
 
-export default async function contextController(
-  app: FastifyInstance,
-  { composeContext = defaultComposeContext }: ContextControllerOptions = {},
-) {
-  app.post('/compose-context', async (request) =>
-    composeContext(request.body as ComposeContextOptions),
-  );
+  @Post('compose-context')
+  compose(@Body() body: ComposeContextOptions) {
+    return this.contextService.compose(body);
+  }
 }
