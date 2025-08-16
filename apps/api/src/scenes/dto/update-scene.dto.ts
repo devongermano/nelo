@@ -1,7 +1,12 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsInt, Min } from 'class-validator';
 
 export class UpdateSceneDto {
   @IsString()
   @IsOptional()
-  text?: string;
+  content?: string;
+
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  order?: number;
 }

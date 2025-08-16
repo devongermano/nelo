@@ -20,25 +20,30 @@ export class ScenesController {
 
   @UseInterceptors(IdempotencyInterceptor)
   @Post()
-  create(@Body() dto: CreateSceneDto) {
-    return this.scenesService.create(dto.text);
+  async create(@Body() dto: CreateSceneDto) {
+    const { content, chapterId, projectId } = dto;
+    return this.scenesService.create(content, chapterId, projectId);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @IfMatchHeader() ifMatch: string,
     @Body() dto: UpdateSceneDto,
   ) {
-    const scene = this.scenesService.find(id);
-    if (String(scene.version) !== ifMatch) {
-      throw new PreconditionFailedException('Version mismatch');
+    // First verify the version matches what the client expects
+    const currentScene = await this.scenesService.find(id);
+    if (String(currentScene.version) !== ifMatch) {
+      throw new PreconditionFailedException('Version mismatch - scene has been modified by another user');
     }
-    return this.scenesService.update(id, dto.text);
+
+    // Perform atomic update with optimistic locking
+    // The service handles all error scenarios including concurrent updates
+    return await this.scenesService.update(id, dto.content, dto.order);
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
+  async get(@Param('id') id: string) {
     return this.scenesService.getSceneById(id);
   }
 }
