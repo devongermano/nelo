@@ -1,5 +1,4 @@
-import 'reflect-metadata';
-import { vi } from 'vitest';
+import { vi, beforeAll, afterAll } from 'vitest';
 
 // Mock environment variables for testing
 process.env.NODE_ENV = 'test';

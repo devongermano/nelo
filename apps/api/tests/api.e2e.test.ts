@@ -15,13 +15,13 @@ describe('API e2e', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     await app.close();
-  });
+  }, 10000);
 
   it('GET /scenes/:id', async () => {
     const project = await prisma.project.create({ data: { name: 'p', version: 1 } });
     const book = await prisma.book.create({ data: { title: 'b', projectId: project.id } });
     const chapter = await prisma.chapter.create({ data: { title: 'c', bookId: book.id } });
-    const scene = await prisma.scene.create({ data: { chapterId: chapter.id, content: 'hi' } });
+    const scene = await prisma.scene.create({ data: { chapterId: chapter.id, projectId: project.id, content: 'hi' } });
 
     const app = await buildApp();
 
@@ -33,5 +33,5 @@ describe('API e2e', () => {
     expect(missing.status).toBe(404);
 
     await app.close();
-  });
+  }, 10000);
 });

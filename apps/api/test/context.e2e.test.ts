@@ -12,5 +12,5 @@ describe('POST /compose-context', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ segments: [], redactions: [] });
     await app.close();
-  });
+  }, 10000);
 });

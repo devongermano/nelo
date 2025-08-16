@@ -4,6 +4,7 @@
   "license": "MPL-2.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "prepare": "ts-patch install",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "prisma:generate": "pnpm --filter @nelo/db generate",
@@ -13,7 +14,9 @@
   },
   "devDependencies": {
     "supertest": "^6.3.3",
+    "ts-patch": "^3.1.2",
     "typescript": "^5.3.0",
+    "typia": "^6.10.0",
     "vitest": "^0.34.0"
   }
 }

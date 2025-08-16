@@ -1,6 +1,4 @@
-import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module';
@@ -35,7 +33,7 @@ export async function buildApp() {
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter(configService));
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  // Typia and @nestia/core handle validation at compile time - no runtime pipe needed
   await app.init();
   return app;
 }

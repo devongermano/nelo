@@ -5,10 +5,16 @@
     "moduleResolution": "Node",
     "esModuleInterop": true,
     "strict": true,
+    "strictNullChecks": true,
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@nelo/*": ["packages/*/src"]
-    }
+    },
+    "plugins": [
+      {
+        "transform": "typia/lib/transform"
+      }
+    ]
   }
 }
