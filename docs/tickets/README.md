@@ -24,7 +24,7 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | Ticket | Title | Priority | Status | Dependencies |
 |--------|-------|----------|---------|--------------|
 | 000 | Complete Typia Setup | Critical | **Complete** ✅ | None |
-| 001 | Database Schema Update | Critical | **Not Started** | 000 |
+| 001 | Database Schema Update | Critical | **Complete** ✅ | 000 |
 | 002 | Shared Types Package | Critical | **Not Started** | 000, 001 |
 | 003 | Consolidate Context Packages | High | **Not Started** | 000 |
 | 004 | Auth Package Setup | High | **Not Started** | 000, 002 |

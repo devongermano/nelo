@@ -3,11 +3,16 @@ import { vi } from 'vitest';
 
 // Set up environment variables for testing
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/nelo_test';
+process.env.DATABASE_URL = 'postgresql://nelo:nelo@localhost:5432/nelo_test';
+process.env.TEST_DATABASE_URL = 'postgresql://nelo:nelo@localhost:5432/nelo_test';
 process.env.ENCRYPTION_KEY = '1234567890123456789012345678901a'; // Exactly 32 characters
 
-// Mock Prisma client for tests that don't need real database
-vi.mock('./src/client', () => {
+// Only mock Prisma client for specific tests that request it
+// Most tests should use the real database for integration testing
+const shouldMockPrisma = process.env.MOCK_PRISMA === 'true';
+
+if (shouldMockPrisma) {
+  vi.mock('./src/client', () => {
   const mockPrisma = {
     $connect: vi.fn().mockResolvedValue(undefined),
     $disconnect: vi.fn().mockResolvedValue(undefined),
@@ -45,9 +50,12 @@ vi.mock('./src/client', () => {
     scene: {
       create: vi.fn().mockResolvedValue({
         id: 'scene-id',
-        content: 'test content',
+        contentMd: 'test content',
         chapterId: 'chapter-id',
         projectId: 'project-id',
+        index: 0,
+        docCrdt: {},
+        wordCount: 0,
         version: 1,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -56,9 +64,12 @@ vi.mock('./src/client', () => {
         if (where.id === 'secret-scene-id') {
           return Promise.resolve({
             id: 'secret-scene-id',
-            content: 'This is a secret scene',
+            contentMd: 'This is a secret scene',
             chapterId: 'chapter-id',
             projectId: 'project-id',
+            index: 0,
+            docCrdt: {},
+            wordCount: 0,
             version: 1,
             createdAt: new Date(),
             updatedAt: new Date()
@@ -66,9 +77,12 @@ vi.mock('./src/client', () => {
         }
         return Promise.resolve({
           id: 'scene-id',
-          content: 'test content',
+          contentMd: 'test content',
           chapterId: 'chapter-id',
           projectId: 'project-id',
+          index: 0,
+          docCrdt: {},
+          wordCount: 0,
           version: 1,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -97,28 +111,38 @@ vi.mock('./src/client', () => {
     styleGuide: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     membership: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     user: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    // New models from updated schema
+    collabSession: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    comment: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    suggestion: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    team: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    projectMember: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    promptPreset: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    persona: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    modelProfile: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
   };
 
-  return {
-    prisma: mockPrisma,
-  };
-});
+    return {
+      prisma: mockPrisma,
+    };
+  });
 
-// Mock the seed data
-vi.mock('./seed-data.js', () => ({
-  demoProject: {
-    name: 'Demo Project',
-    version: 1,
-  },
-  secretScene: {
-    content: 'This is a secret scene',
-  },
-}));
+  // Mock the seed data
+  vi.mock('./seed-data.js', () => ({
+    demoProject: {
+      name: 'Demo Project',
+      version: 1,
+    },
+    secretScene: {
+      contentMd: 'This is a secret scene',
+    },
+  }));
 
-// Mock the seed function
-vi.mock('./seed.js', () => ({
-  seed: vi.fn().mockResolvedValue({
-    projectId: 'demo-project-id',
-    sceneId: 'secret-scene-id',
-  }),
-}));
+  // Mock the seed function
+  vi.mock('./seed.js', () => ({
+    seed: vi.fn().mockResolvedValue({
+      projectId: 'demo-project-id',
+      sceneId: 'secret-scene-id',
+    }),
+  }));
+}

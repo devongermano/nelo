@@ -8,7 +8,7 @@ beforeEach(async () => {
 
 describe('projects.service', () => {
   it('returns all projects', async () => {
-    await prisma.project.create({ data: { name: 'proj', version: 1 } });
+    await prisma.project.create({ data: { name: 'proj', slug: 'proj-slug', version: 1 } });
     const service = new ProjectsService();
     const projects = await service.getAllProjects();
     expect(projects.length).toBe(1);

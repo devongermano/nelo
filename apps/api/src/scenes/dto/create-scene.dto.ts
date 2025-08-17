@@ -1,7 +1,7 @@
 import { tags } from 'typia';
 
 export interface CreateSceneDto {
-  content: string;
+  contentMd: string;
   chapterId: string & tags.Format<"uuid">;
   projectId: string & tags.Format<"uuid">;
 }

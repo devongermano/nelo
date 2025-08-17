@@ -2,6 +2,87 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: Non-Interactive Environment
+
+**Claude Code operates in a NON-INTERACTIVE environment.** You are an automated system, not a human at a terminal. This has critical implications for all commands you run.
+
+### Commands You MUST NEVER Use
+- `prisma migrate dev` - Requires interactive confirmation
+- `prisma migrate reset` (without --force) - Requires interactive confirmation  
+- Any command that prompts for user input
+- Commands that require TTY interaction
+- Interactive git commands (`git rebase -i`, `git add -i`)
+
+### Commands You SHOULD Use Instead
+- `prisma db push --force-reset --accept-data-loss` - Non-interactive schema sync
+- `prisma migrate deploy` - Apply existing migrations in CI/CD
+- `npm ci` instead of `npm install` for deterministic installs
+- Always use `--force`, `--yes`, `-y` flags when available
+- Use `--force` or `--skip-confirmation` flags wherever possible
+
+### Prisma Database Workflow
+
+#### CRITICAL Migration Rules
+1. **NEVER use `prisma migrate dev`** - It requires interactive confirmation
+2. **NEVER use `prisma migrate reset` without --force** - It requires confirmation
+3. **ALWAYS use non-interactive commands** in your automated environment
+4. **ALWAYS verify migrations exist** before using `migrate deploy`
+
+#### Schema Change Workflow
+For database schema changes, follow this EXACT sequence:
+
+```bash
+# 1. For quick prototyping ONLY (WARNING: not for production)
+npx prisma db push --force-reset --accept-data-loss
+
+# 2. For proper migration-based workflow:
+# First, ensure migration files exist in prisma/migrations/
+# Then apply them non-interactively:
+npx prisma migrate deploy
+
+# 3. Always regenerate client after schema changes
+npx prisma generate
+```
+
+#### Creating New Migrations (Without Interactive Mode)
+When you need to create migrations programmatically:
+
+```bash
+# Generate migration SQL from schema changes
+npx prisma migrate diff \
+  --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script > new_migration.sql
+
+# Or use the baseline approach for initial setup
+npx prisma migrate diff \
+  --from-empty \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/$(date +%Y%m%d%H%M%S)_init/migration.sql
+```
+
+#### Test Database Commands
+```bash
+# Apply migrations to test database
+DATABASE_URL="postgresql://nelo:nelo@localhost:5432/nelo_test" npx prisma migrate deploy
+
+# Reset test database (non-interactive)
+DATABASE_URL="postgresql://nelo:nelo@localhost:5432/nelo_test" npx prisma migrate reset --force --skip-seed
+```
+
+#### Migration Status Checks (Safe Commands)
+These commands are safe as they don't require interaction:
+```bash
+# Check migration status
+npx prisma migrate status
+
+# Mark migration as applied (if needed)
+npx prisma migrate resolve --applied <migration-name>
+```
+
+### General Principle
+**Always research CI/CD documentation and non-interactive modes for any tool.** You are automation, not a developer. When you encounter an "interactive" error, immediately look for the non-interactive alternative.
+
 ## Project Overview
 
 Nelo is a creative writing application similar to Novelcrafter or Sudowrite, designed for authors to write novels with AI assistance, real-time collaboration, and comprehensive story bible management. The application follows spec-based development with all requirements defined in `/docs/spec-pack.md`.
@@ -9,6 +90,42 @@ Nelo is a creative writing application similar to Novelcrafter or Sudowrite, des
 ## Spec-Based Development Workflow
 
 This project uses spec-based development. All features are rigorously defined in `/docs/spec-pack.md` and broken down into implementable tickets in `/docs/tickets/`.
+
+### CRITICAL: Spec Evolution Protocol
+
+**⚠️ ALWAYS check `/docs/spec-evolution.md` BEFORE implementing from spec-pack.md ⚠️**
+
+The project has evolved beyond the original spec with justified improvements that MUST be preserved.
+
+#### Hierarchy of Truth
+1. **`/docs/spec-evolution.md`** - Improvements that OVERRIDE original spec
+2. **`/docs/spec-pack.md`** - Original requirements (historical record)  
+3. **Current implementation** - Only if not documented elsewhere
+
+#### When You Find Code That Doesn't Match Spec
+If you find code that differs from spec-pack.md:
+1. **FIRST** check `/docs/spec-evolution.md` - it's likely intentional
+2. **IF NOT DOCUMENTED**: Analyze if it's better than spec
+3. **IF BETTER**: Document in spec-evolution.md with rationale
+4. **IF WORSE**: Fix to match spec or evolution doc
+5. **NEVER** assume a deviation is a bug without checking evolution doc
+
+#### Example: SceneStatus Enum
+The spec says `status String @default("draft")` but the code uses `status SceneStatus @default(DRAFT)` with an enum.
+This is **CORRECT** - see Spec Evolution #001. The enum provides type safety and is intentionally different from the spec.
+
+#### Adding New Evolution Entries
+When you determine a deviation is justified:
+1. Add entry to `/docs/spec-evolution.md` with:
+   - Sequential ID (#001, #002, etc.)
+   - Date
+   - Original spec quote
+   - What was implemented
+   - Why it's better
+   - Affected files
+2. Add comment in code: `// Spec Evolution #001: [brief reason]`
+
+**NEVER modify `/docs/spec-pack.md`** - it's the immutable historical record.
 
 ### How to Work on Tickets
 
@@ -194,11 +311,18 @@ The API is built with NestJS using the Fastify adapter for performance. Key arch
 - **Setup File**: `apps/api/test/setup.ts` for test environment configuration
 - **Test Naming**: `*.test.ts` for unit tests, `*.e2e.test.ts` for integration tests
 
+#### Testing Against Evolution
+Tests validate the EVOLVED spec, not the original. For example:
+- SceneStatus should be an enum, NOT a string
+- Foreign keys should CASCADE delete
+- Version fields should exist for optimistic locking
+- See `/docs/spec-evolution.md` for what the tests should validate
+
 ### Database Layer
 
-- **ORM**: Prisma with PostgreSQL
+- **ORM**: Prisma with PostgreSQL (pgvector extension for embeddings)
 - **Package**: `@nelo/db` workspace package exports Prisma client
-- **Migrations**: Managed via Prisma migrate in packages/db
+- **Schema Management**: Use `prisma db push` for development (NOT `migrate dev`)
 
 ### Frontend (apps/web)
 
@@ -216,7 +340,12 @@ The API is built with NestJS using the Fastify adapter for performance. Key arch
 
 ## Domain Model
 
-### Core Entities (Per Spec)
+### Core Entities (Original Spec - See Evolution Doc for Updates)
+
+**Note**: The descriptions below reflect the original spec. See `/docs/spec-evolution.md` for improvements like:
+- `Scene.status` is actually a SceneStatus enum, not a string
+- All foreign keys CASCADE delete
+- Version fields added for optimistic locking
 
 #### Manuscript Structure
 - **Project** → **Book** → **Chapter** → **Scene**
@@ -259,3 +388,128 @@ The API is built with NestJS using the Fastify adapter for performance. Key arch
 - **ProjectMember**: User roles in projects
 - **Role**: OWNER|MAINTAINER|WRITER|READER
 - **Budget**: Cost limits per project
+
+## Documentation Standards
+
+### CRITICAL: Clean Documentation Principles
+
+**You MUST follow these documentation standards to maintain a clean, navigable codebase.**
+
+#### Documentation Hierarchy
+
+1. **Primary Documentation** (`/docs/`)
+   - `spec-pack.md` - Source of truth for all requirements
+   - `database-migrations.md` - Database migration guide
+   - `adr-*.md` - Architecture Decision Records
+   - `/docs/tickets/` - Development tickets and tracking
+
+2. **Package Documentation** (`/packages/*/`)
+   - `README.md` - MINIMAL, only:
+     - Brief description (1-2 lines)
+     - Quick start commands
+     - Link to main docs: "See `/docs/` for detailed documentation"
+   - NO duplicate information from `/docs/`
+
+3. **Application Documentation** (`/apps/*/`)
+   - Same as packages - minimal README
+   - Implementation details in code comments ONLY when complex
+
+#### What to Update vs Create
+
+**ALWAYS UPDATE existing documentation:**
+- `/docs/database-migrations.md` - Add sections, don't create new files
+- `/docs/tickets/README.md` - Update status tracker
+- `/CLAUDE.md` - Add sections for new patterns
+- Existing package READMEs - Keep minimal
+
+**ONLY CREATE new documentation when:**
+- New ADR for architectural decisions (`/docs/adr-XXX-title.md`)
+- New migration SQL files (in migrations folder)
+- New tickets (in `/docs/tickets/`)
+- Initial minimal README for new packages
+
+#### Documentation Anti-Patterns (NEVER DO)
+
+❌ **NEVER**:
+- Create multiple files for the same topic
+- Duplicate information across files
+- Create lengthy package READMEs
+- Add setup guides in multiple places
+- Create "docs" folders in packages
+- Write the same instructions twice
+- Create files like `SETUP.md`, `INSTALL.md`, `CONFIGURATION.md`
+
+✅ **ALWAYS**:
+- Link to primary docs from package READMEs
+- Keep single source of truth
+- Update existing sections instead of creating new files
+- Use clear section headers in existing docs
+- Maintain the established hierarchy
+
+#### Examples
+
+**BAD** (creates redundancy):
+```
+/packages/db/
+├── README.md (500 lines explaining migrations)
+├── MIGRATIONS.md (duplicate info)
+├── docs/
+│   ├── setup.md
+│   └── troubleshooting.md
+```
+
+**GOOD** (clean structure):
+```
+/packages/db/
+├── README.md (10 lines with link to /docs/database-migrations.md)
+```
+
+**BAD** README in package:
+```markdown
+# Database Package
+
+## Installation
+[100 lines of setup instructions]
+
+## Migrations
+[200 lines duplicating /docs/database-migrations.md]
+
+## Troubleshooting
+[150 lines of common issues]
+```
+
+**GOOD** README in package:
+```markdown
+# @nelo/db
+
+Prisma database client and migrations for Nelo.
+
+## Quick Start
+\`\`\`bash
+pnpm test           # Run tests
+pnpm db:migrate     # Run migrations
+\`\`\`
+
+See `/docs/database-migrations.md` for detailed documentation.
+```
+
+#### When Adding New Information
+
+1. **First** check if a relevant document exists in `/docs/`
+2. **If yes**: Add a new section to that document
+3. **If no**: Consider if it belongs in an existing document
+4. **Last resort**: Create a new file in `/docs/` (not in packages)
+
+#### Test Documentation
+
+- Test files are self-documenting through descriptive test names
+- Use `describe()` and `it()` blocks with clear descriptions
+- NO separate test documentation files
+- Example tests serve as usage documentation
+
+#### Migration Documentation
+
+All migration documentation goes in `/docs/database-migrations.md`:
+- Add new sections for new migration types
+- Include rollback procedures in same file
+- Keep troubleshooting in one place
