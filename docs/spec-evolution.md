@@ -173,25 +173,220 @@ Some models could benefit from audit fields:
 
 ---
 
-## #006: StyleGuide Field Name (TO BE FIXED)
+## #006: StyleGuide Field Name
 
-**Status**: 🔧 NEEDS FIX
+**Status**: ✅ IMPLEMENTED
 
-**Current Implementation**:
+**Original Issue**:
 ```prisma
 model StyleGuide {
-  rules Json  // Wrong field name
+  rules Json  // Wrong field name in early implementation
 }
 ```
 
-**Should Match Spec**:
+**Implemented Solution**:
 ```prisma
 model StyleGuide {
   guide Json  // Correct per spec
 }
 ```
 
-**Action Required**: Create migration to rename field.
+**Migration**: Completed in `/packages/db/prisma/migrations/20250817030100_rename_styleguide_field/`
+
+---
+
+## #007: Soft Delete Pattern (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Proposed Addition**:
+Add soft delete fields to core content models:
+```prisma
+deletedAt DateTime?
+deletedBy String?
+```
+
+**Target Models**:
+- Project, Book, Chapter, Scene
+- Entity, CanonFact
+- Refactor, Patch, Hunk
+
+**Rationale**:
+- **Recovery**: Users can restore accidentally deleted content
+- **Audit Trail**: Track deletion history for compliance
+- **Referential Integrity**: Maintain references without cascade delete issues
+- **Performance**: Deleted records can be archived/purged in batch later
+
+**Trade-offs**:
+- Pro: Data recovery capability, audit compliance
+- Pro: Undo/restore functionality for users
+- Con: Increased storage (mitigated by periodic purge)
+- Con: All queries need `deletedAt IS NULL` filter
+
+**Implementation Notes**:
+- Default queries exclude soft-deleted records
+- Add `includeDeleted` parameter to relevant endpoints
+- Create restoration endpoints for OWNER/MAINTAINER roles
+
+---
+
+## #008: Audit Fields Pattern (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Proposed Addition**:
+Add audit fields to track content authorship:
+```prisma
+createdBy String?  // User ID who created
+updatedBy String?  // User ID who last updated
+```
+
+**Target Models** (Phase 1):
+- Project, Book, Chapter, Scene
+- Entity, CanonFact
+- StyleGuide, PromptPreset
+
+**Rationale**:
+- **Attribution**: Know who created/modified content
+- **Collaboration**: Essential for multi-writer projects
+- **Accountability**: Track changes for review
+- **Analytics**: Understand contribution patterns
+
+**Implementation Notes**:
+- Populate from JWT claims in API middleware
+- Make nullable for backward compatibility
+- Phase 2: Add to all user-generated content models
+
+---
+
+## #009: ModelProfile Tokenization Fields (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Proposed Expansion**:
+```prisma
+model ModelProfile {
+  // Existing fields...
+  maxInputTokens  Int?      // Model's context window
+  maxOutputTokens Int?      // Max generation length
+  pricing         Json?     // { inputPer1K, outputPer1K, currency }
+  tokenizer       String?   // e.g., "tiktoken:gpt-4", "anthropic:claude-3"
+  throughputQPS   Int?      // Rate limit in queries per second
+  supportsNSFW    Boolean?  @default(false)
+}
+```
+
+**Rationale**:
+- **Cost Estimation**: Calculate costs before generation
+- **Token Counting**: Accurate context window management
+- **Rate Limiting**: Respect provider limits
+- **Model Selection**: Choose appropriate model for content length
+- **Content Filtering**: Flag NSFW-capable models
+
+**Integration Points**:
+- `/tokenize/estimate` endpoint uses tokenizer field
+- Budget enforcement uses pricing field
+- Context composer respects maxInputTokens
+- Rate limiter uses throughputQPS
+
+---
+
+## #010: Enhanced ETag Format for Optimistic Locking (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Current Implementation**:
+```typescript
+// Simple version comparison
+if (String(scene.version) !== ifMatch) { throw... }
+```
+
+**Proposed Format**:
+```typescript
+// Standard ETag format
+ETag: W/"scene-{id}-v{version}"
+// Example: W/"scene-uuid123-v5"
+```
+
+**Rationale**:
+- **HTTP Standards**: Follows RFC 7232 ETag specification
+- **Cache Integration**: Works with CDN/proxy caches
+- **Resource Identification**: ETag includes resource type and ID
+- **Weak Validation**: W/ prefix indicates semantic equivalence
+
+**Benefits**:
+- Standard HTTP semantics
+- Better debugging (ETag shows resource and version)
+- Future: Strong ETags for byte-for-byte equality
+
+**Implementation**:
+```typescript
+function generateETag(type: string, id: string, version: number): string {
+  return `W/"${type}-${id}-v${version}"`;
+}
+
+function parseETag(etag: string): { type: string; id: string; version: number } | null {
+  const match = /^W\/"(\w+)-(.+)-v(\d+)"$/.exec(etag);
+  if (!match) return null;
+  return { type: match[1], id: match[2], version: parseInt(match[3]) };
+}
+```
+
+---
+
+## #011: E2EE Degrade Response Pattern (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Scenario**: User has E2EE enabled but selects a cloud AI model
+
+**Response Format**:
+```typescript
+// HTTP 409 Conflict
+{
+  "code": "E2EE_INCOMPATIBLE",
+  "message": "End-to-end encryption is enabled but the selected model requires cloud processing",
+  "options": [
+    {
+      "action": "USE_LOCAL_MODEL",
+      "description": "Switch to a local model (Ollama/LM Studio)"
+    },
+    {
+      "action": "DISABLE_E2EE_FOR_RUN", 
+      "description": "Temporarily disable encryption for this generation only"
+    },
+    {
+      "action": "CANCEL",
+      "description": "Cancel the generation request"
+    }
+  ]
+}
+```
+
+**Client Handling**:
+1. Show modal with three options
+2. If DISABLE_E2EE_FOR_RUN: Create SecurityEvent, retry without E2EE
+3. If USE_LOCAL_MODEL: Switch model selector, retry
+4. If CANCEL: Close modal, no action
+
+**Security Event**:
+```prisma
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  type      String   // "E2EE_TEMPORARY_DISABLE"
+  userId    String
+  projectId String
+  runId     String?
+  metadata  Json?    // { reason, modelProfile, ... }
+  createdAt DateTime @default(now())
+}
+```
+
+**Rationale**:
+- **User Control**: Explicit consent for security degradation
+- **Audit Trail**: SecurityEvents track exceptions
+- **Graceful Degradation**: As specified in spec-pack.md
+- **Clear Communication**: Users understand the trade-off
 
 ---
 

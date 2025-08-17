@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 @Controller()
 @UseInterceptors(IdempotencyInterceptor)
 class TestController {
+  // @ts-ignore
   @Post('test')
   handler() {
     return { ok: true };

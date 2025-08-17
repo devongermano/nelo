@@ -1,6 +1,7 @@
 import { vi, beforeAll, afterAll } from 'vitest';
 
 // Mock environment variables for testing
+// @ts-ignore
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/nelo_test';
 process.env.ENCRYPTION_KEY = '1234567890123456789012345678901a'; // Exactly 32 characters

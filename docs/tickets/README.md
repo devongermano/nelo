@@ -29,6 +29,8 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | 003 | Consolidate Context Packages | High | **Not Started** | 000 |
 | 004 | Auth Package Setup | High | **Not Started** | 000, 002 |
 | 005 | Offline Package Setup | Medium | **Not Started** | 000 |
+| 006 | Audit & Soft Delete Infrastructure | Medium | **Not Started** | 001 |
+| 007 | Permission Matrix & Guards | High | **Not Started** | 004 |
 
 ### 01-core (MVP Features)
 
@@ -42,6 +44,8 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | 006 | Real-time Collaboration | High | **Not Started** | 01-core/001 |
 | 007 | Authentication & Access | Critical | **Not Started** | 00-structural/000, 004 |
 | 008 | Export & Refactor Tools | Medium | **Not Started** | 01-core/001, 002 |
+| 009 | Tokenizer Service | Medium | **Not Started** | 01-core/003 |
+| 010 | Billing & Plans | Low | **Not Started** | 01-core/007 |
 
 ## Implementation Order
 
