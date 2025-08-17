@@ -111,12 +111,29 @@ The client should display a modal dialog:
 3. Client sends plaintext with flag `e2eeTemporarilyDisabled: true`
 4. Server processes request normally
 5. Server logs security exception
-6. Response is encrypted before transmission back
+6. **Response delivered over TLS** (client re-encrypts before persistence)
 
 #### If CANCEL:
 1. Modal closes
 2. No action taken
 3. User remains in current state
+
+## ⚠️ CRITICAL CLARIFICATION: Response Handling
+
+### Server CANNOT Encrypt Response
+The server **does not possess** the project's encryption key, therefore:
+- Server delivers AI-generated content over TLS (transport security only)
+- Client receives plaintext response over secure HTTPS connection
+- Client is responsible for re-encrypting with project key before storage
+- This maintains the E2EE security model where only clients have keys
+
+### Alternative: Ephemeral Key Exchange (Future Enhancement)
+If response encryption is desired:
+1. Client generates ephemeral key pair for this request
+2. Client sends public key with the request
+3. Server encrypts response with ephemeral public key
+4. Client decrypts with ephemeral private key
+5. Client re-encrypts with project key for storage
 
 ## Security Event Logging
 
@@ -279,7 +296,9 @@ Track (in aggregate, not per-user):
 
 ### Security Testing
 
-- Verify plaintext is never logged when E2EE is active
-- Confirm security events are created correctly
-- Test that temporary disable is truly temporary (one request)
-- Verify encrypted response even after temporary disable
+- Verify plaintext is NEVER logged in SecurityEvents
+- Confirm security events are created for EVERY disable (no batching)
+- Test that temporary disable is truly temporary (single request scope)
+- Verify response delivered over TLS only (NOT encrypted with project key)
+- Confirm client re-encrypts before persistence
+- Validate no plaintext content in audit logs

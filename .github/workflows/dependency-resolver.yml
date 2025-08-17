@@ -1,0 +1,230 @@
+name: Dependency Resolver
+description: Automatically updates ticket status when dependencies are met
+
+on:
+  issues:
+    types: [closed, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      ticket_id:
+        description: 'Specific ticket to mark as complete'
+        required: false
+        type: string
+      dry_run:
+        description: 'Run in dry-run mode (no changes)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  resolve-on-close:
+    name: Resolve Dependencies on Issue Close
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issues' && 
+      github.event.action == 'closed' &&
+      contains(github.event.issue.labels.*.name, 'ticket')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Extract ticket ID
+        id: ticket
+        run: |
+          TITLE="${{ github.event.issue.title }}"
+          TICKET_ID=$(echo "$TITLE" | grep -oE "[0-9]{2}-[a-z]+/[0-9]{3}[a-z-]*" | head -1)
+          echo "ticket_id=$TICKET_ID" >> $GITHUB_OUTPUT
+          echo "Found ticket ID: $TICKET_ID"
+      
+      - name: Mark as complete
+        if: steps.ticket.outputs.ticket_id != ''
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label "status:complete" \
+            --remove-label "status:available,status:in-progress,status:blocked"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Resolve dependencies
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          ./scripts/resolve-dependencies.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Summary
+        run: |
+          echo "## Dependency Resolution Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Ticket ${{ steps.ticket.outputs.ticket_id }} was closed" >> $GITHUB_STEP_SUMMARY
+          echo "Dependencies have been automatically resolved" >> $GITHUB_STEP_SUMMARY
+
+  resolve-on-complete-label:
+    name: Resolve When Marked Complete
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issues' && 
+      github.event.action == 'labeled' &&
+      (github.event.label.name == 'status:complete' || 
+       github.event.label.name == 'status:approved')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Resolve dependencies
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          echo "Issue #${{ github.event.issue.number }} marked as complete/approved"
+          echo "Resolving dependencies..."
+          ./scripts/resolve-dependencies.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Report results
+        run: |
+          echo "## Dependency Resolution Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "Issue #${{ github.event.issue.number }} was marked as complete" >> $GITHUB_STEP_SUMMARY
+          
+          # Show newly available tickets
+          echo "### Newly Available Tickets" >> $GITHUB_STEP_SUMMARY
+          gh issue list --label "ticket,status:available" --json number,title | \
+            jq -r '.[] | "- #\(.number): \(.title)"' >> $GITHUB_STEP_SUMMARY
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manual-resolution:
+    name: Manual Dependency Resolution
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set environment
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "DRY_RUN=true" >> $GITHUB_ENV
+            echo "Running in DRY RUN mode"
+          fi
+      
+      - name: Mark specific ticket complete
+        if: github.event.inputs.ticket_id != ''
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          ./scripts/resolve-dependencies.sh mark-complete "${{ github.event.inputs.ticket_id }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: General resolution
+        if: github.event.inputs.ticket_id == ''
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          ./scripts/resolve-dependencies.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check-on-comment:
+    name: Check Dependencies on Command
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '/resolve-dependencies')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check permissions
+        id: check
+        run: |
+          # Check if commenter has write access
+          PERMISSION=$(gh api /repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission --jq '.permission')
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "write" ]]; then
+            echo "authorized=true" >> $GITHUB_OUTPUT
+          else
+            echo "authorized=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Unauthorized message
+        if: steps.check.outputs.authorized != 'true'
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            -b "❌ @${{ github.event.comment.user.login }} - You need write access to run dependency resolution"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Run resolution
+        if: steps.check.outputs.authorized == 'true'
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          
+          # Add reaction to show command received
+          gh api --method POST \
+            /repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content='+1'
+          
+          # Check for dry-run flag
+          if echo "${{ github.event.comment.body }}" | grep -q "dry-run"; then
+            export DRY_RUN=true
+            echo "Running in DRY RUN mode"
+          fi
+          
+          # Check for verbose flag
+          if echo "${{ github.event.comment.body }}" | grep -q "verbose"; then
+            export VERBOSE=true
+            echo "Running in VERBOSE mode"
+          fi
+          
+          # Run the resolution
+          OUTPUT=$(./scripts/resolve-dependencies.sh 2>&1)
+          
+          # Post results as comment
+          gh issue comment ${{ github.event.issue.number }} -b "## Dependency Resolution Results
+          
+\`\`\`
+$OUTPUT
+\`\`\`"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  scheduled-check:
+    name: Scheduled Dependency Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Run dependency check
+        run: |
+          chmod +x scripts/resolve-dependencies.sh
+          echo "Running scheduled dependency check..."
+          ./scripts/resolve-dependencies.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Generate report
+        run: |
+          echo "## Dependency Status Report" >> $GITHUB_STEP_SUMMARY
+          echo "Generated at: $(date)" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Available Tickets" >> $GITHUB_STEP_SUMMARY
+          gh issue list --label "ticket,status:available" --json number,title | \
+            jq -r '.[] | "- #\(.number): \(.title)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Blocked Tickets" >> $GITHUB_STEP_SUMMARY
+          gh issue list --label "ticket,status:blocked" --json number,title | \
+            jq -r '.[] | "- #\(.number): \(.title)"' >> $GITHUB_STEP_SUMMARY
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# Add this to run periodically
+schedule:
+  - cron: '0 */6 * * *'  # Every 6 hours

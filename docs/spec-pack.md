@@ -1,3 +1,16 @@
+# ⚠️ HISTORICAL SPECIFICATION - DO NOT MODIFY
+
+**This document is IMMUTABLE and preserves the original vision for historical reference.**
+
+**🎯 For implementation, see `/docs/spec-evolution.md` which contains:**
+- Complete replacement schemas (not deltas)
+- All improvements and corrections
+- The actual models to implement
+
+**If a model/feature appears in spec-evolution.md, use THAT version, not this one.**
+
+---
+
 # {APP_NAME} Spec Pack
 
 ## 0. Project Guardrails

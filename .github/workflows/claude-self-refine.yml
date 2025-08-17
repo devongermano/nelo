@@ -1,0 +1,215 @@
+name: Claude Self-Refine Execution
+description: Executes Claude Code with the self-refine workflow for a specific ticket
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket_number:
+        description: 'GitHub issue number to process'
+        required: true
+        type: string
+      mode:
+        description: 'Execution mode'
+        required: true
+        type: choice
+        options:
+          - plan
+          - implement
+          - critique
+          - full-cycle
+        default: full-cycle
+  workflow_call:
+    inputs:
+      ticket_number:
+        required: true
+        type: string
+      mode:
+        required: false
+        type: string
+        default: full-cycle
+
+jobs:
+  self-refine:
+    name: Execute Self-Refine Workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Setup Git
+        run: |
+          git config --global user.name "Claude Code[bot]"
+          git config --global user.email "claude-code[bot]@users.noreply.github.com"
+      
+      # Planning Phase
+      - name: Execute Planning Phase
+        if: contains(inputs.mode, 'plan') || inputs.mode == 'full-cycle'
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: plan
+          max_iterations: 2
+          command: |
+            # Planning Phase for Issue #${{ inputs.ticket_number }}
+            
+            1. Retrieve issue details:
+               gh issue view ${{ inputs.ticket_number }} --json title,body,labels
+            
+            2. Load essential context:
+               - Read /docs/spec-pack.md
+               - Read /docs/spec-evolution.md (CRITICAL - overrides spec-pack)
+               - Read /CLAUDE.md
+            
+            3. Deep research (ultrathink):
+               - Search for related code
+               - Identify dependencies
+               - Find optimization opportunities
+            
+            4. Create implementation plan
+            
+            5. Self-critique the plan for completeness
+            
+            6. Refine and document:
+               gh issue comment ${{ inputs.ticket_number }} -b "## Implementation Plan\n[refined plan]"
+      
+      # Implementation Phase
+      - name: Execute Implementation
+        if: contains(inputs.mode, 'implement') || inputs.mode == 'full-cycle'
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          max_iterations: 10
+          allowed_commands:
+            - git
+            - pnpm
+            - npm
+            - node
+            - gh
+          command: |
+            # Implementation Phase for Issue #${{ inputs.ticket_number }}
+            
+            1. Create feature branch:
+               git checkout -b ticket/${{ inputs.ticket_number }}-implementation
+            
+            2. Implement according to the refined plan in the issue
+            
+            3. Run tests after each component:
+               pnpm test
+            
+            4. Commit with clear messages
+            
+            5. Update issue status:
+               gh issue comment ${{ inputs.ticket_number }} -b "[IMPLEMENTATION COMPLETE]"
+      
+      # Critique Phase
+      - name: Execute Critique
+        if: contains(inputs.mode, 'critique') || inputs.mode == 'full-cycle'
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: plan
+          max_iterations: 1
+          command: |
+            # Critique Phase for Issue #${{ inputs.ticket_number }}
+            
+            Review the implementation:
+            1. Check all acceptance criteria
+            2. Verify spec compliance (including evolution)
+            3. Review code quality
+            4. Check test coverage
+            5. Identify issues
+            
+            Document critique:
+            gh issue comment ${{ inputs.ticket_number }} -b "## Critique Results\n[detailed critique]"
+      
+      # Refinement Loop
+      - name: Refinement Loop
+        if: inputs.mode == 'full-cycle'
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          max_iterations: 5
+          command: |
+            # Check if refinement needed based on critique
+            # If issues found, implement fixes
+            # Re-run critique until approved
+            
+            Check the latest critique in issue #${{ inputs.ticket_number }}
+            If it needs improvement:
+              1. Implement the proposed fixes
+              2. Commit changes
+              3. Request another critique
+      
+      # Final Validation
+      - name: Run Final Validation
+        if: inputs.mode == 'full-cycle'
+        run: |
+          echo "Running final validation..."
+          pnpm lint || true
+          pnpm typecheck || true
+          pnpm test || true
+      
+      # Create PR if approved
+      - name: Create Pull Request
+        if: inputs.mode == 'full-cycle'
+        id: create-pr
+        run: |
+          # Check if implementation was approved
+          LATEST_COMMENT=$(gh issue view ${{ inputs.ticket_number }} --json comments -q '.comments[-1].body')
+          
+          if echo "$LATEST_COMMENT" | grep -q "APPROVED"; then
+            # Get iteration count
+            ITERATIONS=$(gh issue view ${{ inputs.ticket_number }} --json comments | \
+              jq '[.comments[].body | select(contains("Critique"))] | length')
+            
+            # Create PR
+            gh pr create \
+              --title "feat: Implements #${{ inputs.ticket_number }} (Self-Refined)" \
+              --body "## Summary
+          
+          Implements issue #${{ inputs.ticket_number }} using the Self-Refine workflow.
+          
+          ## Refinement Stats
+          - Critique iterations: $ITERATIONS
+          - Final status: APPROVED ✅
+          
+          ## Changes
+          See issue #${{ inputs.ticket_number }} for detailed implementation plan and critique log.
+          
+          Closes #${{ inputs.ticket_number }}" \
+              --base main \
+              --label "auto-generated,self-refined"
+          else
+            echo "Implementation not yet approved. Needs more refinement."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Update metrics
+      - name: Update Metrics
+        if: always()
+        run: |
+          # Add execution metadata
+          gh issue comment ${{ inputs.ticket_number }} \
+            -b "🤖 Automated execution completed.
+          - Workflow: ${{ github.run_id }}
+          - Mode: ${{ inputs.mode }}
+          - Status: ${{ job.status }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

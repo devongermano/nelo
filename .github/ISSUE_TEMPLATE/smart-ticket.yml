@@ -1,0 +1,144 @@
+name: Smart Development Ticket
+description: Self-refining ticket with plan/critique tracking for automated Claude Code workflow
+title: "[TICKET] "
+labels: ["ticket", "status:available", "needs-plan"]
+projects: ["devongermano/nelo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Self-Refining Development Ticket
+        This ticket follows the iterative refinement workflow with automated Claude Code integration.
+        
+  - type: input
+    id: ticket_id
+    attributes:
+      label: Ticket ID
+      description: Reference to original ticket in docs/tickets/
+      placeholder: "00-structural/004"
+    validations:
+      required: true
+      
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Task priority level
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+      default: 2
+    validations:
+      required: true
+      
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: Type of development work
+      options:
+        - Structural (Foundation)
+        - Core (MVP Feature)
+        - Bug Fix
+        - Enhancement
+        - Documentation
+      default: 0
+    validations:
+      required: true
+      
+  - type: textarea
+    id: original_spec
+    attributes:
+      label: Original Specification
+      description: Paste the content from docs/tickets/ or describe the requirement
+      placeholder: |
+        Include:
+        - Acceptance criteria
+        - Dependencies
+        - Implementation requirements
+    validations:
+      required: true
+      
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List prerequisite tickets or requirements
+      placeholder: |
+        - Ticket 00-structural/001 (Database Schema)
+        - Ticket 00-structural/000 (Typia Setup)
+        
+  - type: textarea
+    id: implementation_plan
+    attributes:
+      label: Implementation Plan
+      description: "[AUTOMATED] Will be updated by Claude after planning phase"
+      placeholder: |
+        [This section will be automatically filled by Claude Code during Plan Mode]
+        
+        Phase 1: Research & Analysis
+        Phase 2: Implementation Steps
+        Phase 3: Testing Strategy
+        Phase 4: Validation
+      render: markdown
+      
+  - type: textarea
+    id: critique_log
+    attributes:
+      label: Critique & Refinement Log
+      description: "[AUTOMATED] Self-critique iterations tracked here"
+      placeholder: |
+        [This section tracks the iterative refinement process]
+        
+        ## Iteration 1: [Date/Time]
+        ### Issues Found:
+        - [ ] Issue 1
+        - [ ] Issue 2
+        ### Improvements Made:
+        - Fix 1
+        - Fix 2
+        
+        ## Iteration 2: [Date/Time]
+        ### Critique Result: POSITIVE ✅
+      render: markdown
+      
+  - type: dropdown
+    id: refinement_status
+    attributes:
+      label: Refinement Status
+      description: Current stage in the Self-Refine workflow
+      options:
+        - "🔍 Planning (Plan Mode)"
+        - "📝 Plan Refinement"
+        - "🔨 Initial Implementation"
+        - "🔎 Under Critique"
+        - "🔧 Refining Implementation"
+        - "✅ Approved (Positive Critique)"
+        - "🚀 Ready for PR"
+      default: 0
+      
+  - type: input
+    id: assigned_agent
+    attributes:
+      label: Assigned Agent/Developer
+      description: Claude instance ID or developer username
+      placeholder: "claude-1 or @username"
+      
+  - type: input
+    id: working_branch
+    attributes:
+      label: Working Branch
+      description: "[AUTOMATED] Branch created for this ticket"
+      placeholder: "ticket/004-jwt-authentication"
+      
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Any other relevant information
+      placeholder: |
+        - Special considerations
+        - Performance requirements
+        - Security concerns

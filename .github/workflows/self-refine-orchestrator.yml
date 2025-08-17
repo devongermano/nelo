@@ -1,0 +1,198 @@
+name: Self-Refine Orchestrator
+description: Orchestrates the iterative refinement workflow for ticket implementation
+
+on:
+  issues:
+    types: [opened, labeled, assigned]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Check for available tickets every 30 minutes during work hours
+    - cron: '*/30 8-18 * * 1-5'  # Mon-Fri, 8am-6pm
+  workflow_dispatch:
+    inputs:
+      ticket_number:
+        description: 'Specific ticket number to process'
+        required: false
+        type: string
+
+jobs:
+  # Job 1: Auto-assign planning when ticket becomes available
+  assign-planning:
+    name: Assign Ticket for Planning
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issues' && 
+      contains(github.event.label.name, 'status:available')
+    
+    steps:
+      - name: Check for conflicts
+        id: check
+        run: |
+          # Check if already claimed
+          LABELS=$(gh issue view ${{ github.event.issue.number }} --json labels -q '.labels[].name')
+          if echo "$LABELS" | grep -q "status:claimed"; then
+            echo "Issue already claimed"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Claim ticket
+        if: steps.check.outcome == 'success'
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label "status:claimed,agent:github-actions" \
+            --remove-label "status:available"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Trigger Claude planning
+        if: steps.check.outcome == 'success'
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: plan
+          max_iterations: 1
+          command: |
+            You are in Plan Mode. Perform deep analysis for issue #${{ github.event.issue.number }}.
+            
+            1. Get the issue details using: gh issue view ${{ github.event.issue.number }}
+            2. Read /docs/spec-pack.md and /docs/spec-evolution.md
+            3. Research the codebase thoroughly (ultrathink)
+            4. Create a comprehensive implementation plan
+            5. Update the issue with your refined plan
+
+  # Job 2: Detect when critique is needed
+  critique-check:
+    name: Check for Critique Request
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issue_comment' && 
+      contains(github.event.comment.body, '[IMPLEMENTATION COMPLETE]')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.issue.pull_request.head.ref }}
+      
+      - name: Trigger critique
+        uses: anthropics/claude-code-action@v1
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: plan
+          max_iterations: 1
+          command: |
+            You are in Plan Mode. Perform critique for issue #${{ github.event.issue.number }}.
+            
+            1. Review the implementation thoroughly
+            2. Check against all acceptance criteria
+            3. Identify any issues or improvements
+            4. Document your critique in the issue
+            5. Mark as APPROVED or NEEDS IMPROVEMENT
+
+  # Job 3: Quality gate based on critique
+  quality-gate:
+    name: Quality Gate Check
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issue_comment' && 
+      contains(github.event.comment.body, 'Overall Assessment: APPROVED')
+    
+    steps:
+      - name: Update issue status
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label "status:approved,quality:passed" \
+            --remove-label "status:under-critique,status:refining"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Notify ready for PR
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            -b "🎉 Implementation approved after iterative refinement! Ready to create PR."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 4: Monitor stale claims
+  monitor-stale:
+    name: Release Stale Claims
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Find stale claims
+        run: |
+          # Find issues claimed more than 4 hours ago
+          STALE_THRESHOLD=$((4 * 60 * 60))
+          CURRENT_TIME=$(date +%s)
+          
+          gh issue list --label "status:claimed" --json number,updatedAt | \
+          jq -r '.[] | select((now - (.updatedAt | fromdateiso8601)) > '$STALE_THRESHOLD') | .number' | \
+          while read -r ISSUE_NUM; do
+            echo "Releasing stale claim on issue #$ISSUE_NUM"
+            gh issue edit "$ISSUE_NUM" \
+              --add-label "status:available" \
+              --remove-label "status:claimed" \
+              --remove-assignee "@me"
+            gh issue comment "$ISSUE_NUM" \
+              -b "⏰ Released stale claim after 4 hours of inactivity"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 5: Batch processing trigger
+  batch-process:
+    name: Batch Process Available Tickets
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Find and process tickets
+        run: |
+          # Process specific ticket or find next available
+          if [ -n "${{ github.event.inputs.ticket_number }}" ]; then
+            TICKET="${{ github.event.inputs.ticket_number }}"
+          else
+            TICKET=$(gh issue list --label "status:available" --limit 1 --json number -q '.[0].number')
+          fi
+          
+          if [ -n "$TICKET" ]; then
+            echo "Processing ticket #$TICKET"
+            gh workflow run claude-self-refine.yml -f ticket_number=$TICKET
+          else
+            echo "No available tickets to process"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 6: Metrics collection
+  collect-metrics:
+    name: Collect Refinement Metrics
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issues' && 
+      github.event.action == 'closed'
+    
+    steps:
+      - name: Calculate metrics
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          
+          # Count critique iterations
+          ITERATIONS=$(gh issue view $ISSUE_NUM --json comments | \
+            jq '[.comments[].body | select(contains("Critique Iteration"))] | length')
+          
+          # Count refinement cycles
+          REFINEMENTS=$(gh issue view $ISSUE_NUM --json comments | \
+            jq '[.comments[].body | select(contains("Proposed Fixes"))] | length')
+          
+          # Add metrics as labels
+          gh issue edit $ISSUE_NUM \
+            --add-label "metrics:iterations-$ITERATIONS,metrics:refinements-$REFINEMENTS"
+          
+          echo "📊 Metrics: $ITERATIONS iterations, $REFINEMENTS refinements"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

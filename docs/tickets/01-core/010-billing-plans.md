@@ -3,9 +3,16 @@
 ## Priority
 **Low** - Post-MVP feature for hosted/SaaS version
 
+## Implementation Decision (2024)
+**Use LemonSqueezy for MVP, plan for Stripe at scale**:
+- LemonSqueezy acts as Merchant of Record (handles all tax compliance)
+- Fastest setup with minimal friction (important for MVP)
+- Migrate to Stripe when you need more control
+- Avoids global tax complexity initially
+
 ## Spec Reference
 - `/docs/spec-pack.md` - Budget model (lines 461-468)
-- ChatGPT recommendations for hosted plans
+- Spec Evolution #010 (Billing & Plans) - Enhanced billing architecture
 
 ## Dependencies
 - 01-core/007 (Authentication & Access) - Must be complete
@@ -486,9 +493,23 @@ curl -X POST http://localhost:3001/generate \
 ```
 
 ## Notes
+- **2024 Decision**: LemonSqueezy for MVP (MoR = no tax headaches)
+- **Migration Path**: Start with LemonSqueezy → Move to Stripe when you need:
+  - Custom billing logic
+  - Advanced subscription features
+  - Lower transaction fees at scale
+- LemonSqueezy handles VAT/GST compliance globally
+- One invoice per month to LemonSqueezy vs thousands to customers
 - Start with hard-coded limits, move to database later
 - Consider grace periods for downgrades
-- Add webhook handlers for Stripe/Paddle
+- Add webhook handlers for payment provider
 - Cache plan checks for performance
 - Future: Usage-based billing for enterprise
 - Future: Team billing (multiple users per subscription)
+
+## LemonSqueezy Quick Setup
+1. Create account at lemonsqueezy.com
+2. Set up products matching plan tiers
+3. Use their SDK: `npm install @lemonsqueezy/lemonsqueezy.js`
+4. Implement webhooks for subscription events
+5. Store `lemonSqueezyCustomerId` instead of `stripeCustomerId`

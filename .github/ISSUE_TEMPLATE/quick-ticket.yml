@@ -1,0 +1,35 @@
+name: Quick Ticket Import
+description: Quick template for importing existing tickets from docs/tickets/
+title: "[TICKET-{{TICKET_ID}}] "
+labels: ["ticket", "status:available"]
+body:
+  - type: input
+    id: ticket_id
+    attributes:
+      label: Ticket ID
+      description: ID from docs/tickets/
+      placeholder: "00-structural/004"
+    validations:
+      required: true
+      
+  - type: textarea
+    id: content
+    attributes:
+      label: Ticket Content
+      description: Paste the entire ticket content from docs/tickets/
+      render: markdown
+    validations:
+      required: true
+      
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Ready for Implementation
+      description: Confirm this ticket is ready
+      options:
+        - label: Dependencies are complete
+          required: false
+        - label: Spec has been reviewed
+          required: false
+        - label: This follows spec-evolution.md
+          required: false

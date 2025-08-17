@@ -6,6 +6,7 @@
 ## Spec Reference
 - `/docs/spec-pack.md` - E2EE guardrails (lines 6-7)
 - Spec Evolution #011 (E2EE Degrade Response Pattern)
+- Spec Evolution #028 (E2EE Response Clarification) - Clarifies response handling
 - `/docs/e2ee-degrade.md` - Detailed flow documentation
 
 ## Dependencies
@@ -34,6 +35,10 @@
 - [ ] Temporary disable is truly single-request only
 - [ ] Local model switching works
 - [ ] Tests cover all three user choices
+- [ ] **NEW**: Response delivered over TLS only (not "encrypted back")
+- [ ] **NEW**: Never log plaintext in SecurityEvent
+- [ ] **NEW**: Audit event created on EVERY E2EE disable
+- [ ] **NEW**: Scope strictly limited to single request
 
 ## Implementation Steps
 
@@ -375,6 +380,72 @@ describe('E2EE User Flow', () => {
     // Model selector should switch
     await expect(page.locator('[data-testid="model-selector"]'))
       .toContainText('Ollama');
+  });
+});
+```
+
+### SecurityEvent Parity Tests (NEW from chat-gpt-2.md)
+```typescript
+describe('SecurityEvent Parity', () => {
+  it('should NEVER log plaintext in SecurityEvent', async () => {
+    const response = await request(app)
+      .post('/ai/generate')
+      .send({
+        projectId: e2eeProjectId,
+        prompt: 'Secret content',
+        e2eeTemporarilyDisabled: true
+      });
+    
+    const event = await prisma.securityEvent.findFirst({
+      where: { type: 'E2EE_TEMPORARY_DISABLE' }
+    });
+    
+    // Verify no plaintext leaked
+    expect(JSON.stringify(event)).not.toContain('Secret content');
+    expect(event.metadata.prompt).toBeUndefined();
+    expect(event.metadata.response).toBeUndefined();
+  });
+  
+  it('should create audit event on EVERY disable', async () => {
+    // Make 5 requests with E2EE disabled
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/ai/generate')
+        .send({ e2eeTemporarilyDisabled: true });
+    }
+    
+    const events = await prisma.securityEvent.findMany({
+      where: { type: 'E2EE_TEMPORARY_DISABLE' }
+    });
+    
+    expect(events).toHaveLength(5);
+  });
+  
+  it('should limit scope to single request only', async () => {
+    // First request with E2EE disabled
+    await request(app)
+      .post('/ai/generate')
+      .send({ e2eeTemporarilyDisabled: true });
+    
+    // Second request without flag should fail if E2EE enabled
+    const response = await request(app)
+      .post('/ai/generate')
+      .send({ /* no e2eeTemporarilyDisabled */ });
+    
+    expect(response.status).toBe(409); // Should conflict again
+  });
+  
+  it('should deliver response over TLS only', async () => {
+    // Verify response is NOT encrypted with project key
+    const response = await request(app)
+      .post('/ai/generate')
+      .set('X-E2EE-Enabled', 'true')
+      .send({ e2eeTemporarilyDisabled: true });
+    
+    // Response should be plaintext (over TLS)
+    expect(response.body.encrypted).toBeUndefined();
+    expect(response.body.content).toBeDefined();
+    // Client is responsible for re-encryption
   });
 });
 ```

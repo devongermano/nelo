@@ -97,10 +97,17 @@ This project uses spec-based development. All features are rigorously defined in
 
 The project has evolved beyond the original spec with justified improvements that MUST be preserved.
 
-#### Hierarchy of Truth
-1. **`/docs/spec-evolution.md`** - Improvements that OVERRIDE original spec
-2. **`/docs/spec-pack.md`** - Original requirements (historical record)  
-3. **Current implementation** - Only if not documented elsewhere
+#### 📚 Documentation Hierarchy (IMPLEMENTATION TRUTH)
+
+**THREE SIMPLE RULES:**
+1. **Search `/docs/spec-evolution.md` FIRST** - Contains COMPLETE replacement schemas
+2. **If NOT found there** → use `/docs/spec-pack.md` version
+3. **NEVER mentally merge** - Use complete definitions from spec-evolution
+
+**Key Points:**
+- **spec-pack.md is IMMUTABLE** - Historical record only (DO NOT MODIFY)
+- **spec-evolution.md is LIVING** - Update as improvements are discovered
+- **spec-evolution.md contains COMPLETE schemas** - Not deltas or patches
 
 #### When You Find Code That Doesn't Match Spec
 If you find code that differs from spec-pack.md:
@@ -115,17 +122,24 @@ The spec says `status String @default("draft")` but the code uses `status SceneS
 This is **CORRECT** - see Spec Evolution #001. The enum provides type safety and is intentionally different from the spec.
 
 #### Adding New Evolution Entries
-When you determine a deviation is justified:
-1. Add entry to `/docs/spec-evolution.md` with:
-   - Sequential ID (#001, #002, etc.)
-   - Date
-   - Original spec quote
-   - What was implemented
-   - Why it's better
-   - Affected files
-2. Add comment in code: `// Spec Evolution #001: [brief reason]`
+When you determine a deviation from spec-pack.md is justified:
 
-**NEVER modify `/docs/spec-pack.md`** - it's the immutable historical record.
+1. **Update spec-evolution.md**:
+   - Add/update COMPLETE model in "📚 COMPLETE MODEL DEFINITIONS" section
+   - Create numbered evolution entry with rationale
+   - Use next sequential number (#033, #034, etc.)
+   - Mark status (📋 PLANNED or ✅ IMPLEMENTED)
+
+2. **Update code**:
+   - Add comment: `// Spec Evolution #033: [brief reason]`
+   - Ensure implementation matches complete schema exactly
+
+3. **Document location**:
+   - Complete schemas go in model definitions section
+   - Evolution rationale goes in numbered entries
+   - NEVER modify spec-pack.md
+
+**Remember**: spec-evolution.md contains COMPLETE REPLACEMENTS, not deltas. When adding an evolution, provide the entire model definition, not just the changes.
 
 ### How to Work on Tickets
 
@@ -158,6 +172,135 @@ When you determine a deviation is justified:
 - **Completeness**: A ticket is only done when ALL acceptance criteria are met
 - **Testing**: Every feature requires tests - no exceptions
 - **Validation**: Always run `pnpm lint` and `pnpm typecheck` before considering done
+
+## Self-Refine Workflow Protocol 🔄
+
+**CRITICAL: This project uses the Self-Refine pattern for ALL ticket implementations.**
+
+The Self-Refine pattern is an academically-proven iterative refinement approach that improves code quality by ~20% through systematic self-critique and improvement cycles.
+
+### Why Self-Refine?
+
+- **Proven Results**: Academic research shows ~20% improvement in code quality
+- **Reduces Bugs**: Catches issues before they reach production
+- **Better Design**: Forces deep thinking about implementation approach
+- **Documentation**: Creates audit trail of decisions and improvements
+- **Continuous Improvement**: Each iteration makes the code better
+
+### The Five Phases of Self-Refine
+
+#### Phase 1: Deep Understanding (Plan Mode) 🔍
+1. Enter Plan Mode for read-only analysis
+2. Load ticket + spec-pack.md + spec-evolution.md
+3. Research codebase thoroughly ("ultrathink" for complex tickets)
+4. Identify optimization opportunities
+5. Create comprehensive implementation plan
+
+#### Phase 2: Plan Refinement 📝
+1. Critique your own plan for completeness
+2. Check spec compliance (including evolution overrides)
+3. Identify gaps and edge cases
+4. Refine plan based on self-critique
+5. Document refined plan in GitHub issue
+
+#### Phase 3: Implementation 🔨
+1. Exit Plan Mode
+2. Create feature branch: `ticket/[number]-[description]`
+3. Follow refined plan exactly
+4. Commit frequently with clear messages
+5. Update issue with progress
+
+#### Phase 4: Critique Loop 🔄
+1. Re-enter Plan Mode
+2. Review implementation critically
+3. Check ALL acceptance criteria
+4. Document issues found
+5. If issues exist:
+   - Exit Plan Mode
+   - Implement fixes
+   - Return to critique
+6. Repeat until critique is positive
+
+#### Phase 5: Completion 🚀
+1. Positive critique required
+2. Run final validation (`pnpm lint`, `pnpm typecheck`, `pnpm test`)
+3. Create PR with refinement metrics
+4. Document iteration count
+
+### Quality Standards for Critique
+
+Every critique MUST check:
+- ✅ All acceptance criteria met
+- ✅ Spec compliance (including evolution)
+- ✅ Error handling comprehensive
+- ✅ Performance acceptable
+- ✅ Tests adequate and passing
+- ✅ Code follows project patterns
+- ✅ Security considerations addressed
+
+### Iteration Requirements
+
+- **Minimum**: 1 critique iteration required
+- **Maximum**: 5 iterations (escalate if more needed)
+- **Time Box**: Each phase < 30 minutes
+- **Documentation**: Every critique must be logged
+
+### Using Claude Commands
+
+Execute the complete workflow with:
+```bash
+/self-refine-ticket [issue-number]
+```
+
+Other available commands:
+- `/claim-next-ticket` - Find and claim available work
+- `/critique-implementation` - Perform critique only
+- `/refine-plan` - Improve existing plan
+
+### GitHub Integration
+
+All tickets are tracked as GitHub Issues with:
+- **Status Labels**: `status:planning`, `status:in-progress`, `status:under-critique`, `status:approved`
+- **Refinement Tracking**: Critique iterations logged in issue comments
+- **Metrics**: Iteration count tracked for quality analysis
+
+### Example Critique Format
+
+```markdown
+## Critique Iteration 1 - [Date/Time]
+
+### Issues Found:
+- [ ] Missing error handling in API endpoint
+- [ ] Test coverage insufficient (only 60%)
+- [ ] Performance issue with N+1 queries
+
+### Proposed Fixes:
+1. Add try-catch with proper error responses
+2. Add edge case tests for null inputs
+3. Use eager loading to prevent N+1
+
+### Overall Assessment: NEEDS IMPROVEMENT ⚠️
+```
+
+When critique is positive:
+```markdown
+## Critique Iteration 2 - [Date/Time]
+
+### Review Complete:
+- ✅ All acceptance criteria met
+- ✅ Spec compliance verified
+- ✅ Tests comprehensive (95% coverage)
+- ✅ Performance optimized
+
+### Overall Assessment: APPROVED ✅
+```
+
+### Important Notes
+
+- **Never skip critique phase** - It's essential for quality
+- **Be thorough but fair** - Focus on real issues, not perfection
+- **Document everything** - Future developers need to understand decisions
+- **Use Plan Mode** - It provides safe, read-only environment for analysis
 
 ## Validation with Typia
 

@@ -2,6 +2,8 @@
 
 This directory contains all development tickets for the Nelo project. Each ticket represents an isolated unit of work that can be completed independently by Claude Code or other developers.
 
+**⚠️ CRITICAL BLOCKER**: Ticket 00-structural/004 (JWT Authentication) must be implemented first as it blocks all security features.
+
 ## Ticket Organization
 
 - **00-structural/** - Foundation improvements that must be completed first
@@ -27,11 +29,15 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | 001 | Database Schema Update | Critical | **Complete** ✅ | 000 |
 | 002 | Shared Types Package | Critical | **Not Started** | 000, 001 |
 | 003 | Consolidate Context Packages | High | **Not Started** | 000 |
-| 004 | Auth Package Setup | High | **Not Started** | 000, 002 |
+| 004 | JWT Authentication Setup | **CRITICAL** | **Not Started** 🔴 | 001 |
 | 005 | Offline Package Setup | Medium | **Not Started** | 000 |
 | 006 | Audit & Soft Delete Infrastructure | Medium | **Not Started** | 001 |
 | 007 | Permission Matrix & Guards | High | **Not Started** | 004 |
 | 008 | Enhanced ETag Implementation | Low | **Not Started** | 001 |
+| 010 | Rate Limiting Enhancement | High | **Not Started** | 004 |
+| 011 | Caching Strategy | Medium | **Not Started** | 004 |
+| 012 | Error Handling Standards | High | **Not Started** | 004 |
+| 013 | Logging & Monitoring | High | **Not Started** | 012 |
 
 ### 01-core (MVP Features)
 

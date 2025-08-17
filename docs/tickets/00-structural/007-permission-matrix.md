@@ -8,7 +8,14 @@
 - Spec Evolution #012 (Permission Matrix Pattern)
 
 ## Dependencies
-- 00-structural/004 (Auth Package Setup) - In progress
+- 00-structural/004 (JWT Authentication) - Must be completed first
+
+## Implementation Decision (2024)
+**Use Custom Implementation** - After thorough research comparing CASL, Casbin, and custom implementations:
+- Our simple 4-role RBAC system doesn't justify CASL's complexity
+- Custom implementation gives us zero dependencies and better performance
+- CASL would only be beneficial if we needed field-level permissions or complex conditional logic
+- Custom approach is easier to understand and maintain for our use case
 
 ## Current State
 - Roles defined: OWNER, MAINTAINER, WRITER, READER
@@ -21,6 +28,7 @@
 - PolicyGuard for action-based permissions
 - Consistent permission checking across all endpoints
 - Clear documentation of who can do what
+- Redis caching for permission checks (multi-instance support)
 
 ## Acceptance Criteria
 - [ ] Permission matrix documented in `/docs/permissions.md`
@@ -86,12 +94,14 @@ Create `/docs/permissions.md`:
 4. **Project Context**: All permissions are evaluated within project context
 ```
 
-### 2. Create Policy Service
+### 2. Create Policy Service with Caching
 
 Create `/apps/api/src/auth/policy.service.ts`:
 ```typescript
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { Role } from '@nelo/db';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 
 export type Action = 
   | 'project.create' | 'project.delete' | 'project.update' | 'project.invite'
@@ -105,6 +115,7 @@ export type Action =
 
 @Injectable()
 export class PolicyService {
+  private readonly CACHE_TTL = 300; // 5 minutes
   private readonly permissions: Record<Action, Role[]> = {
     // Project Management
     'project.create': ['OWNER'],
@@ -147,6 +158,10 @@ export class PolicyService {
     'import.project': ['OWNER', 'MAINTAINER'],
   };
   
+  constructor(
+    @InjectRedis() private readonly redis: Redis,
+  ) {}
+  
   can(role: Role, action: Action): boolean {
     // OWNER can do anything
     if (role === 'OWNER') return true;
@@ -161,12 +176,42 @@ export class PolicyService {
     action: Action,
     prisma: any
   ): Promise<boolean> {
+    // Check cache first
+    const cacheKey = `perm:${userId}:${projectId}:${action}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached !== null) {
+      return cached === 'true';
+    }
+    
+    // Fetch membership from database
     const membership = await prisma.projectMember.findFirst({
       where: { userId, projectId }
     });
     
-    if (!membership) return false;
-    return this.can(membership.role, action);
+    if (!membership) {
+      // Cache negative result for shorter time (60 seconds)
+      await this.redis.setex(cacheKey, 60, 'false');
+      return false;
+    }
+    
+    const hasPermission = this.can(membership.role, action);
+    
+    // Cache result
+    await this.redis.setex(cacheKey, this.CACHE_TTL, hasPermission.toString());
+    
+    return hasPermission;
+  }
+  
+  async invalidateUserPermissions(userId: string, projectId?: string): Promise<void> {
+    // Invalidate cached permissions when role changes
+    const pattern = projectId 
+      ? `perm:${userId}:${projectId}:*`
+      : `perm:${userId}:*`;
+    
+    const keys = await this.redis.keys(pattern);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
   }
 }
 ```
@@ -347,8 +392,11 @@ curl -X POST http://localhost:3001/scenes \
 ```
 
 ## Notes
+- **2024 Decision**: Custom implementation chosen over CASL for simplicity and performance
+- **Caching Strategy**: Redis caching with 5-minute TTL for permission checks
+- Cache invalidation required when user roles change (call `invalidateUserPermissions`)
+- Negative results cached for 60 seconds to prevent repeated DB queries
 - Start with core actions, expand as needed
-- Consider caching permission checks for performance
 - Future: Add delegation (temporary permission grants)
 - Future: Add team-level permissions
-- Monitor performance impact of permission checks
+- Monitor cache hit rates and adjust TTL as needed

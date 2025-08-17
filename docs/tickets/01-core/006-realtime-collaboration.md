@@ -8,6 +8,7 @@
 - Tech Stack: "Realtime: Yjs CRDTs" (line 24)
 - User Story: "Realtime co-edit with presence" (lines 90-97)
 - WebSocket Events (lines 807-841)
+- Spec Evolution #022 (Split CRDT Storage) - Addresses docCrdt performance issues
 
 ## Dependencies
 - 01-core/001 (Scene Markdown Editor)
@@ -31,6 +32,21 @@
 - [ ] Cursors show other users' positions
 - [ ] Offline edits merge correctly
 - [ ] No data loss on conflicts
+
+## ⚠️ CRDT Storage Consideration
+
+**Note**: Spec Evolution #022 proposes splitting CRDT storage into Doc/DocUpdate models
+for better performance. While this ticket currently stores Yjs documents in Scene.docCrdt,
+consider the evolution's architecture for production implementation to avoid:
+- Row bloat from large CRDT documents
+- Slow cold loads (>1s for large documents)
+- Lack of garbage collection
+
+The evolution proposes:
+- Separate `Doc` model for snapshots
+- `DocUpdate` model for append-only updates
+- Periodic rollup and compression
+- <100ms cold load times
 
 ## ✨ Optimized Implementation
 

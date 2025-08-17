@@ -9,6 +9,8 @@
 - Global Rename user story (lines 72-79)
 - RenamePreviewRequest/Response (lines 657-668)
 - MVP requirement: "mass find/replace" (line 54)
+- Spec Evolution #021 (Unified Anchor System) - Critical for reliable refactoring
+- Spec Evolution #027 (Deterministic Patch Reapply) - For safe refactor rollback
 
 ## Dependencies
 - 01-core/001 (Scene Markdown Editor)
@@ -42,6 +44,18 @@
 4. **Memory Management**: Automatic garbage collection
 5. **Resumable Exports**: Handle interrupted downloads
 6. **Parallel Processing**: Use worker threads for CPU-intensive tasks
+
+## ⚠️ Anchor System Consideration
+
+**Important**: Spec Evolution #021 proposes a unified Anchor system that would make
+refactoring significantly more reliable by preventing anchor drift under CRDT edits.
+Consider implementing the unified anchor system before or alongside refactor tools to:
+- Prevent refactoring positions from drifting during collaborative editing
+- Ensure patches can be deterministically reapplied (Evolution #027)
+- Maintain consistent behavior across comments, suggestions, and refactors
+
+The current EditSpan model uses separate yjsAnchor and textAnchor fields, but the
+unified system would consolidate this into a single, robust Anchor model.
 
 ## Implementation Steps
 
