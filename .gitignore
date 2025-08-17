@@ -3,3 +3,8 @@ npm-debug.log
 pnpm-lock.yaml
 package-lock.json
 .DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
