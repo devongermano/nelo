@@ -1,26 +1,14 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { prisma } from '@nelo/db';
+import { prisma, type Scene, type Prisma, SceneStatus } from '@nelo/db';
 import { SceneConcurrentUpdateException } from './exceptions/scene-concurrent-update.exception';
 
-// Import types from the Prisma client
-type Scene = {
-  id: string;
-  content: string | null;
-  chapterId: string;
-  projectId: string;
-  order: number | null;
-  version: number;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-// Transaction client type - simplified for compatibility
-type PrismaTransactionClient = any;
+// Transaction client type from Prisma
+type PrismaTransactionClient = Prisma.TransactionClient;
 
 @Injectable()
 export class ScenesService {
   private readonly logger = new Logger(ScenesService.name);
-  async create(content: string, chapterId: string, projectId: string): Promise<Scene> {
+  async create(contentMd: string, chapterId: string, projectId: string): Promise<Scene> {
     try {
       // Validate that the chapter and project exist
       const [chapter, project] = await Promise.all([
@@ -36,11 +24,23 @@ export class ScenesService {
         throw new BadRequestException(`Project with ID ${projectId} does not exist`);
       }
 
+      // Get the next index for the scene
+      const lastScene = await prisma.scene.findFirst({
+        where: { chapterId },
+        orderBy: { index: 'desc' },
+        select: { index: true }
+      });
+      const nextIndex = (lastScene?.index ?? -1) + 1;
+
       const scene = await prisma.scene.create({
         data: {
-          content,
+          contentMd,
           chapterId,
           projectId,
+          index: nextIndex,
+          status: SceneStatus.DRAFT,
+          docCrdt: {},
+          wordCount: contentMd ? contentMd.split(/\s+/).length : 0,
           version: 1,
         },
       });
@@ -72,7 +72,7 @@ export class ScenesService {
     }
   }
 
-  async update(id: string, content?: string, order?: number): Promise<Scene> {
+  async update(id: string, contentMd?: string, order?: number): Promise<Scene> {
     try {
       // Use a transaction to ensure atomicity and proper optimistic locking
       return await prisma.$transaction(async (tx: PrismaTransactionClient) => {
@@ -92,8 +92,9 @@ export class ScenesService {
             version: currentScene.version, // This ensures optimistic locking
           },
           data: {
-            content: content !== undefined ? content : currentScene.content,
+            contentMd: contentMd !== undefined ? contentMd : currentScene.contentMd,
             order: order !== undefined ? order : currentScene.order,
+            wordCount: contentMd !== undefined ? (contentMd ? contentMd.split(/\s+/).length : 0) : currentScene.wordCount,
             version: {
               increment: 1,
             },

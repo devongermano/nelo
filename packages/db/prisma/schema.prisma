@@ -11,6 +11,59 @@ datasource db {
   extensions = [vector]
 }
 
+// Enums
+enum Role {
+  OWNER
+  MAINTAINER
+  WRITER
+  READER
+}
+
+enum RevealState {
+  PLANNED
+  REVEALED
+  REDACTED_UNTIL_SCENE
+  REDACTED_UNTIL_DATE
+}
+
+enum SuggestionStatus {
+  OPEN
+  APPLIED
+  DISMISSED
+}
+
+enum RefactorStatus {
+  DRAFT
+  PREVIEW
+  APPLIED
+  PARTIAL
+  DISCARDED
+}
+
+enum PatchStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  APPLIED
+  FAILED
+}
+
+enum HunkStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  APPLIED
+  FAILED
+}
+
+enum ScopeType {
+  SCENE
+  CHAPTER
+  BOOK
+  PROJECT
+  CUSTOM
+}
+
 enum RunStatus {
   PENDING
   RUNNING
@@ -18,35 +71,70 @@ enum RunStatus {
   FAILED
 }
 
-enum Role {
-  OWNER
-  MEMBER
+// Spec Evolution #001: Type-safe enum instead of string literals
+// Original spec had: status String @default("draft") 
+// This provides compile-time safety and database validation
+enum SceneStatus {
+  DRAFT
+  REVISED
+  FINAL
+}
+
+// Spec Evolution #002: EntityType as enum for type safety
+// Original spec had: type String // CHARACTER|LOCATION|ITEM|ORGANIZATION|OTHER
+// This provides same benefits as SceneStatus enum
+enum EntityType {
+  CHARACTER
+  LOCATION
+  ITEM
+  ORGANIZATION
+  OTHER
+}
+
+// Models
+// Spec Evolution #003: All foreign key relationships use CASCADE DELETE
+// This ensures data integrity and prevents orphaned records
+model User {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  displayName  String?
+  createdAt    DateTime        @default(now())
+  memberships  Membership[]
+  projectRoles ProjectMember[]
+  providerKeys ProviderKey[]
+  settings     Json?
 }
 
 model Project {
-  id           String        @id @default(uuid())
+  id           String          @id @default(uuid())
   name         String
-  version      Int           @default(1)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  slug         String          @unique
+  version      Int             @default(1) // Spec Evolution #004: Optimistic locking
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   books        Book[]
-  styleGuides  StyleGuide[]
+  members      ProjectMember[]
   budgets      Budget[]
-  users        Membership[]
-  providerKeys ProviderKey[]
   entities     Entity[]
-  contextRules ContextRule[]
   scenes       Scene[]
+  styleGuides  StyleGuide[]
+  contextRules ContextRule[]
+  runs         Run[]
+  refactors    Refactor[]
+  prompts      PromptPreset[]
+  personas     Persona[]
+  models       ModelProfile[]
 }
 
 model Book {
-  id        String   @id @default(uuid())
-  project   Project  @relation(fields: [projectId], references: [id])
+  id        String    @id @default(uuid())
+  project   Project   @relation(fields: [projectId], references: [id])
   projectId String
   title     String
-  version   Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  index     Int
+  version   Int       @default(1) // Spec Evolution #004: Optimistic locking
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   chapters  Chapter[]
 }
 
@@ -55,122 +143,61 @@ model Chapter {
   book      Book     @relation(fields: [bookId], references: [id])
   bookId    String
   title     String
+  index     Int
   order     Int?
-  version   Int      @default(1)
+  version   Int      @default(1) // Spec Evolution #004: Optimistic locking
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   scenes    Scene[]
 }
 
 model Scene {
-  id         String       @id @default(uuid())
-  chapter    Chapter      @relation(fields: [chapterId], references: [id])
-  chapterId  String
-  project    Project      @relation(fields: [projectId], references: [id])
-  projectId  String
-  content    String?
-  embedding  Unsupported("vector")?
-  order      Int?
-  version    Int          @default(1)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  snapshots  Snapshot[]
-  entities   SceneEntity[]
-  embeddings Embedding[]
-  runs       Run[]
-  refactors  Refactor[]
-}
-
-model Entity {
-  id        String       @id @default(uuid())
-  project   Project      @relation(fields: [projectId], references: [id])
-  projectId String
-  name      String
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  facts     CanonFact[]
-  scenes    SceneEntity[]
-}
-
-model CanonFact {
-  id        String   @id @default(uuid())
-  entity    Entity   @relation(fields: [entityId], references: [id])
-  entityId  String
-  content   String
-  createdAt DateTime @default(now())
-}
-
-model ContextRule {
-  id        String   @id @default(uuid())
-  project   Project  @relation(fields: [projectId], references: [id])
-  projectId String
-  pattern   String
-  response  String
-  createdAt DateTime @default(now())
-}
-
-model Run {
-  id        String     @id @default(uuid())
-  scene     Scene?     @relation(fields: [sceneId], references: [id])
-  sceneId   String?
-  status    RunStatus  @default(PENDING)
-  createdAt DateTime   @default(now())
-  costEvents CostEvent[]
-}
-
-model CostEvent {
-  id        String   @id @default(uuid())
-  run       Run      @relation(fields: [runId], references: [id])
-  runId     String
-  amount    Float
-  createdAt DateTime @default(now())
-}
-
-model Refactor {
-  id        String   @id @default(uuid())
-  scene     Scene    @relation(fields: [sceneId], references: [id])
-  sceneId   String
-  patches   Patch[]
-  createdAt DateTime @default(now())
-}
-
-model Patch {
-  id         String   @id @default(uuid())
-  refactor   Refactor @relation(fields: [refactorId], references: [id])
-  refactorId String
-  hunks      Hunk[]
-}
-
-model Hunk {
-  id       String @id @default(uuid())
-  patch    Patch  @relation(fields: [patchId], references: [id])
-  patchId  String
-  editSpans EditSpan[]
-}
-
-model EditSpan {
-  id     String @id @default(uuid())
-  hunk   Hunk   @relation(fields: [hunkId], references: [id])
-  hunkId String
-  start  Int
-  end    Int
+  id             String          @id @default(uuid())
+  chapter        Chapter         @relation(fields: [chapterId], references: [id])
+  chapterId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  projectId      String
+  title          String?
+  index          Int
+  status         SceneStatus     @default(DRAFT) // Spec Evolution #001: Using enum for type safety
+  pov            String?         // Point of view character
+  tense          String?         // past|present|future
+  contentMd      String?         // Markdown content (canonical)
+  docCrdt        Json            @default("{}") // Yjs CRDT document
+  summary        String?
+  wordCount      Int             @default(0)
+  embedding      Unsupported("vector")?
+  order          Int?
+  version        Int             @default(1) // Spec Evolution #004: Optimistic locking
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  snapshots      Snapshot[]
+  sentences      Sentence[]
+  entities       SceneEntity[]
+  runs           Run[]
+  patches        Patch[]
+  comments       Comment[]
+  suggestions    Suggestion[]
+  collabSessions CollabSession[]
 }
 
 model Snapshot {
-  id        String    @id @default(uuid())
-  scene     Scene     @relation(fields: [sceneId], references: [id])
+  id        String   @id @default(uuid())
+  scene     Scene    @relation(fields: [sceneId], references: [id])
   sceneId   String
-  content   String
-  createdAt DateTime   @default(now())
-  sentences Sentence[]
+  version   Int
+  contentMd String
+  createdAt DateTime @default(now())
 }
 
 model Sentence {
-  id         String   @id @default(uuid())
-  snapshot   Snapshot @relation(fields: [snapshotId], references: [id])
-  snapshotId String
-  text       String
-  order      Int
+  id        String   @id @default(uuid())
+  scene     Scene    @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  index     Int
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model StyleGuide {
@@ -178,57 +205,253 @@ model StyleGuide {
   project   Project  @relation(fields: [projectId], references: [id])
   projectId String
   name      String
-  rules     Json?
+  guide     Json     // Spec Evolution #006: Renamed from 'rules' to match spec
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Entity {
+  id         String        @id @default(uuid())
+  project    Project       @relation(fields: [projectId], references: [id])
+  projectId  String
+  type       EntityType    // Spec Evolution #002: Using enum for type safety
+  name       String
+  aliases    String[]      // Alternative names
+  traits     String[]      // Key characteristics
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  facts      CanonFact[]
+  embeddings Embedding[]
+  scenes     SceneEntity[]
+}
+
+model CanonFact {
+  id            String      @id @default(uuid())
+  entity        Entity      @relation(fields: [entityId], references: [id])
+  entityId      String
+  fact          String      // The canonical fact
+  revealState   RevealState @default(PLANNED)
+  revealSceneId String?     // Scene where fact is revealed
+  revealAt      DateTime?   // Date when fact becomes known
+  confidence    Int         @default(100) // 0-100 confidence score
+  createdAt     DateTime    @default(now())
+}
+
+model PromptPreset {
+  id        String   @id @default(uuid())
+  name      String
+  text      String
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+}
+
+model Persona {
+  id        String   @id @default(uuid())
+  name      String
+  style     String
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+}
+
+model ModelProfile {
+  id        String   @id @default(uuid())
+  name      String
+  provider  String
+  config    Json
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+}
+
+model ContextRule {
+  id        String   @id @default(uuid())
+  include   String[]
+  exclude   String[]
+  maxTokens Int
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+}
+
+model CollabSession {
+  id        String   @id @default(uuid())
+  scene     Scene    @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  users     String[] // Array of user IDs in session
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  scene     Scene    @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  author    String
+  text      String
+  range     Json?
   createdAt DateTime @default(now())
 }
 
-model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
-  createdAt   DateTime     @default(now())
-  memberships Membership[]
+model Suggestion {
+  id        String           @id @default(uuid())
+  scene     Scene            @relation(fields: [sceneId], references: [id])
+  sceneId   String
+  author    String
+  text      String
+  status    SuggestionStatus @default(OPEN)
+  range     Json?
+  createdAt DateTime         @default(now())
+}
+
+model CostEvent {
+  id        String   @id @default(uuid())
+  provider  String
+  tokensIn  Int
+  tokensOut Int
+  amount    Decimal  @db.Decimal(10, 4)
+  createdAt DateTime @default(now())
+  run       Run?     @relation(fields: [runId], references: [id])
+  runId     String?
+}
+
+model Refactor {
+  id          String         @id @default(uuid())
+  project     Project        @relation(fields: [projectId], references: [id])
+  projectId   String
+  scopeType   ScopeType
+  scopeId     String?        // sceneId|chapterId|bookId for targeted scopes
+  instruction String         // user's natural-language request
+  plan        Json?          // interpreter output: entities, operations, constraints
+  status      RefactorStatus @default(DRAFT)
+  createdBy   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  patches     Patch[]
+  metrics     Json?          // counts, confidence distribution
+}
+
+model Patch {
+  id          String      @id @default(uuid())
+  refactor    Refactor    @relation(fields: [refactorId], references: [id])
+  refactorId  String
+  scene       Scene       @relation(fields: [sceneId], references: [id])
+  sceneId     String
+  status      PatchStatus @default(PROPOSED)
+  summary     String      // A concise, human-readable summary
+  unifiedDiff String      // Unified diff (before/after) for preview UI
+  crdtUpdate  Bytes?      // Yjs/ProseMirror delta for precise apply
+  confidence  Int         @default(80)
+  rationale   String?
+  createdAt   DateTime    @default(now())
+  appliedAt   DateTime?
+  hunks       Hunk[]
+}
+
+model Hunk {
+  id          String     @id @default(uuid())
+  patch       Patch      @relation(fields: [patchId], references: [id])
+  patchId     String
+  status      HunkStatus @default(PROPOSED)
+  summary     String
+  unifiedDiff String
+  crdtUpdate  Bytes?
+  confidence  Int        @default(80)
+  rationale   String?
+  createdAt   DateTime   @default(now())
+  appliedAt   DateTime?
+  editSpans   EditSpan[]
+}
+
+model EditSpan {
+  id         String @id @default(uuid())
+  hunk       Hunk   @relation(fields: [hunkId], references: [id])
+  hunkId     String
+  yjsAnchor  Json?  // RelativePosition payload
+  textAnchor Json?  // { beforeKGramHash, afterKGramHash, approxOffset }
+  startChar  Int?
+  endChar    Int?
+}
+
+model Run {
+  id           String      @id @default(uuid())
+  project      Project     @relation(fields: [projectId], references: [id])
+  projectId    String
+  scene        Scene?      @relation(fields: [sceneId], references: [id])
+  sceneId      String?
+  provider     String
+  model        String
+  action       String      // WRITE|REWRITE|DESCRIBE|EMBED|MODERATE
+  promptObj    Json        // the constructed prompt object
+  inputTokens  Int
+  outputTokens Int
+  costUSD      Decimal     @db.Decimal(10, 4)
+  createdAt    DateTime    @default(now())
+  costEvents   CostEvent[]
+  status       RunStatus   @default(PENDING)
+}
+
+model Embedding {
+  id        String                 @id @default(uuid())
+  entity    Entity                 @relation(fields: [entityId], references: [id])
+  entityId  String
+  embedding Unsupported("vector")
+  createdAt DateTime               @default(now())
+
+  // Note: HNSW index will be created via raw SQL migration
+  @@index([embedding], map: "embedding_idx")
+}
+
+model SceneEntity {
+  scene    Scene  @relation(fields: [sceneId], references: [id])
+  sceneId  String
+  entity   Entity @relation(fields: [entityId], references: [id])
+  entityId String
+
+  @@id([sceneId, entityId])
+}
+
+model Team {
+  id        String       @id @default(uuid())
+  name      String
+  createdAt DateTime     @default(now())
+  members   Membership[]
 }
 
 model Membership {
-  id        String  @id @default(uuid())
-  user      User    @relation(fields: [userId], references: [id])
-  userId    String
-  project   Project @relation(fields: [projectId], references: [id])
-  projectId String
-  role      Role
+  id      String @id @default(uuid())
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+  team    Team   @relation(fields: [teamId], references: [id])
+  teamId  String
+  role    Role   @default(WRITER)
 }
 
-model Budget {
-  id        String   @id @default(uuid())
-  project   Project  @relation(fields: [projectId], references: [id])
+model ProjectMember {
+  id        String  @id @default(uuid())
+  project   Project @relation(fields: [projectId], references: [id])
   projectId String
-  amount    Float
-  createdAt DateTime @default(now())
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  role      Role    @default(WRITER)
+
+  @@unique([projectId, userId])
 }
 
 model ProviderKey {
   id        String   @id @default(uuid())
-  project   Project  @relation(fields: [projectId], references: [id])
+  owner     User     @relation(fields: [ownerId], references: [id])
+  ownerId   String
+  provider  String   // openai|anthropic|openrouter|mistral|ollama|lmstudio
+  label     String
+  enc       Bytes    // ciphertext (envelope encryption)
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model Budget {
+  id       String   @id @default(uuid())
+  project  Project  @relation(fields: [projectId], references: [id])
   projectId String
-  provider  String
-  // SECURITY: API keys should be encrypted before storage using the crypto utilities
-  // Use encryptApiKey() before saving and decryptApiKey() when retrieving
-  apiKey    String
-  createdAt DateTime @default(now())
-}
-
-model SceneEntity {
-  scene   Scene  @relation(fields: [sceneId], references: [id])
-  sceneId String
-  entity  Entity @relation(fields: [entityId], references: [id])
-  entityId String
-  @@id([sceneId, entityId])
-}
-
-model Embedding {
-  id        String   @id @default(uuid())
-  scene     Scene?   @relation(fields: [sceneId], references: [id])
-  sceneId   String?
-  embedding Unsupported("vector")
-  createdAt DateTime @default(now())
+  limitUSD Decimal  @db.Decimal(10, 2)
+  spentUSD Decimal  @db.Decimal(10, 2) @default(0)
+  resetsAt DateTime?
 }

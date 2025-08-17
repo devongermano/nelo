@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url'
 import { prisma } from './src/index.js'
-import { demoProject } from './seed-data.js'
+import { demoProject, secretScene } from './seed-data.js'
 
 export async function seed() {
   const project = await prisma.project.create({
@@ -8,15 +8,22 @@ export async function seed() {
     include: {
       books: {
         include: {
-          chapters: {
-            include: { scenes: true },
-          },
+          chapters: true,
         },
       },
     },
   })
 
-  const scene = project.books[0].chapters[0].scenes[0]
+  // Create the secret scene with proper projectId
+  const chapter = project.books[0].chapters[0]
+  const scene = await prisma.scene.create({
+    data: {
+      ...secretScene,
+      chapterId: chapter.id,
+      projectId: project.id,
+    }
+  })
+
   console.log(`Seeded demo project ${project.id}`)
   console.log(`Seeded secret scene ${scene.id}`)
   return { projectId: project.id, sceneId: scene.id }

@@ -17,8 +17,8 @@ export class ScenesController {
   @UseInterceptors(IdempotencyInterceptor)
   @TypedRoute.Post()
   async create(@TypedBody() dto: CreateSceneDto) {
-    const { content, chapterId, projectId } = dto;
-    return this.scenesService.create(content, chapterId, projectId);
+    const { contentMd, chapterId, projectId } = dto;
+    return this.scenesService.create(contentMd, chapterId, projectId);
   }
 
   @TypedRoute.Patch(':id')
@@ -35,7 +35,7 @@ export class ScenesController {
 
     // Perform atomic update with optimistic locking
     // The service handles all error scenarios including concurrent updates
-    return await this.scenesService.update(id, dto.content, dto.order);
+    return await this.scenesService.update(id, dto.contentMd, dto.order);
   }
 
   @TypedRoute.Get(':id')
