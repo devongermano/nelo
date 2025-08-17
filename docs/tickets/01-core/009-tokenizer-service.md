@@ -5,7 +5,7 @@
 
 ## Spec Reference
 - Spec Evolution #009 (ModelProfile Tokenization Fields)
-- Spec Evolution #013 (Tokenizer Registry Pattern) - To be added
+- Spec Evolution #013 (Tokenizer Registry Pattern)
 
 ## Dependencies
 - 01-core/003 (AI Provider Adapters) - In progress

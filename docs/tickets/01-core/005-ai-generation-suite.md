@@ -9,6 +9,9 @@
 - Run model (lines 523-537)
 - CostEvent tracking (lines 449-459)
 - WRITE/REWRITE/DESCRIBE actions
+- E2EE guardrails (lines 6-7)
+- Spec Evolution #011 (E2EE Degrade Response Pattern)
+- Related: Ticket 01-core/011 (E2EE Degrade Flow)
 
 ## Dependencies
 - 01-core/003 (AI Provider Adapters)
@@ -34,6 +37,8 @@
 - [ ] Costs tracked in database
 - [ ] Run history saved
 - [ ] Budget limits enforced
+- [ ] E2EE conflicts detected and return 409
+- [ ] Security events logged for E2EE exceptions
 
 ## 🚀 Enhanced Implementation with Queue System
 

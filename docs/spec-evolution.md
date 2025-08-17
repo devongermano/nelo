@@ -388,6 +388,76 @@ model SecurityEvent {
 - **Graceful Degradation**: As specified in spec-pack.md
 - **Clear Communication**: Users understand the trade-off
 
+**Implementation Ticket**: 01-core/011 (to be created)
+
+---
+
+## #012: Permission Matrix Pattern (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Concept**: Action-based permission system with role matrix
+
+**Implementation**:
+```typescript
+type Action = 'project.create' | 'scene.update' | 'ai.generate' | ...;
+type Role = 'OWNER' | 'MAINTAINER' | 'WRITER' | 'READER';
+
+const permissions: Record<Action, Role[]> = {
+  'project.create': ['OWNER'],
+  'scene.update': ['OWNER', 'MAINTAINER', 'WRITER'],
+  'ai.generate': ['OWNER', 'MAINTAINER', 'WRITER'],
+  // ...
+};
+```
+
+**Rationale**:
+- **Fine-grained Control**: Specific permissions per action
+- **Maintainable**: Central permission matrix
+- **Auditable**: Clear who can do what
+- **Extensible**: Easy to add new actions
+
+**Documentation**: `/docs/permissions.md` (created)
+**Implementation Ticket**: 00-structural/007
+
+---
+
+## #013: Tokenizer Registry Pattern (PLANNED)
+
+**Status**: 📋 PLANNED
+
+**Concept**: Pluggable tokenizer implementations for different AI models
+
+**Registry Structure**:
+```typescript
+interface Tokenizer {
+  name: string;
+  encode(text: string): number[];
+  countTokens(text: string): number;
+}
+
+class TokenizerRegistry {
+  private tokenizers = new Map<string, Tokenizer>();
+  
+  register(key: string, tokenizer: Tokenizer) { ... }
+  get(modelKey: string): Tokenizer { ... }
+}
+```
+
+**Implementations**:
+- `tiktoken:cl100k_base` - GPT-4 models
+- `tiktoken:p50k_base` - GPT-3.5 models  
+- `anthropic:claude-3` - Claude models
+- `heuristic:default` - Fallback estimator
+
+**Rationale**:
+- **Accuracy**: Model-specific token counting
+- **Cost Estimation**: Pre-generation cost calculation
+- **Context Management**: Prevent context window overflow
+- **Extensible**: Easy to add new tokenizers
+
+**Implementation Ticket**: 01-core/009
+
 ---
 
 ## How to Add New Evolutions

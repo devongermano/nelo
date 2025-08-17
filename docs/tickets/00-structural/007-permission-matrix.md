@@ -5,7 +5,7 @@
 
 ## Spec Reference
 - `/docs/spec-pack.md` - Role enum (line 275)
-- Spec Evolution #012 (Permission Matrix Pattern) - To be added
+- Spec Evolution #012 (Permission Matrix Pattern)
 
 ## Dependencies
 - 00-structural/004 (Auth Package Setup) - In progress

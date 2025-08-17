@@ -8,6 +8,8 @@
 - Provider Adapter Interface (lines 842-850)
 - ModelProfile schema (lines 407-413)
 - ProviderKey model (lines 583-593)
+- Spec Evolution #009 (ModelProfile Tokenization Fields)
+- Related: Ticket 01-core/009 (Tokenizer Service)
 
 ## Dependencies
 - 00-structural/000 (Complete Typia Setup)
@@ -25,7 +27,7 @@
 - Model configuration management
 - Cost tracking per request with dynamic pricing
 - Rate limiting and retry logic
-- Accurate token counting
+- Accurate token counting via tokenizer service (see ticket 01-core/009)
 
 ## Acceptance Criteria
 - [ ] OpenAI adapter generates text via Vercel AI SDK

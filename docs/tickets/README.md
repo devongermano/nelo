@@ -31,6 +31,7 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | 005 | Offline Package Setup | Medium | **Not Started** | 000 |
 | 006 | Audit & Soft Delete Infrastructure | Medium | **Not Started** | 001 |
 | 007 | Permission Matrix & Guards | High | **Not Started** | 004 |
+| 008 | Enhanced ETag Implementation | Low | **Not Started** | 001 |
 
 ### 01-core (MVP Features)
 
@@ -46,6 +47,7 @@ This directory contains all development tickets for the Nelo project. Each ticke
 | 008 | Export & Refactor Tools | Medium | **Not Started** | 01-core/001, 002 |
 | 009 | Tokenizer Service | Medium | **Not Started** | 01-core/003 |
 | 010 | Billing & Plans | Low | **Not Started** | 01-core/007 |
+| 011 | E2EE Degrade Flow | High | **Not Started** | 01-core/005 |
 
 ## Implementation Order
 
