@@ -161,6 +161,8 @@ jobs:
       
       - name: Run resolution
         if: steps.check.outputs.authorized == 'true'
+        env:
+          BODY: ${{ github.event.comment.body }}
         run: |
           chmod +x scripts/resolve-dependencies.sh
           
@@ -170,13 +172,13 @@ jobs:
             -f content='+1'
           
           # Check for dry-run flag
-          if echo "${{ github.event.comment.body }}" | grep -q "dry-run"; then
+          if echo "$BODY" | grep -q "dry-run"; then
             export DRY_RUN=true
             echo "Running in DRY RUN mode"
           fi
           
           # Check for verbose flag
-          if echo "${{ github.event.comment.body }}" | grep -q "verbose"; then
+          if echo "$BODY" | grep -q "verbose"; then
             export VERBOSE=true
             echo "Running in VERBOSE mode"
           fi
